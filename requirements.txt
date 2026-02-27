@@ -1,0 +1,6 @@
+streamlit
+borsapy
+google-genai
+pandas
+plotly
+tabulate
