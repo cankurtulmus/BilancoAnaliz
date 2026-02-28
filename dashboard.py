@@ -26,6 +26,9 @@ st.markdown(
     .sidebar-subtitle { text-align: center; font-size: 14px; color: #888; margin-bottom: 25px; }
     .x-button { background-color: #000000; color: #1DA1F2; border: 1px solid #1DA1F2; padding: 10px; border-radius: 8px; text-align: center; font-weight: bold; transition: all 0.3s ease; }
     .x-button:hover { background-color: #1DA1F2; color: #ffffff; }
+    
+    /* YENİ: En Üstteki Devasa Şirket ve Dönem Başlığı İçin */
+    .terminal-header { text-align: center; color: #1DA1F2; font-size: 32px; font-weight: 900; border-bottom: 2px solid #1DA1F2; padding-bottom: 15px; margin-top: 10px; margin-bottom: 20px; }
     </style>
     """,
     unsafe_allow_html=True
@@ -54,7 +57,6 @@ def yerel_bilanco_cek(sembol):
         for y1, p1, y2, p2 in donemler:
             params = {"companyCode": sembol, "exchange": "TRY", "financialGroup": tablo_tipi, "year1": y1, "period1": p1, "year2": y2, "period2": p2}
             try:
-                # 3 saniyede cevap vermezse direkt global API'ye geçer (Siteyi dondurmaz)
                 cevap = requests.get(url, params=params, headers=headers, timeout=3)
                 if cevap.status_code == 200:
                     veri = cevap.json().get('value', [])
@@ -159,13 +161,17 @@ if analiz_butonu and hisse_kodu:
 
             haberler_metni = son_kap_haberleri(hisse_kodu)
 
+            # --- YENİ: DEVASA VE ŞIK BAŞLIK (DÖNEM BURADA YAZACAK) ---
+            if not guncel_bilanco.empty:
+                st.markdown(f"<div class='terminal-header'>🏢 {hisse_kodu} | 📅 {bulunan_donem} BİLANÇOSU</div>", unsafe_allow_html=True)
+            else:
+                st.markdown(f"<div class='terminal-header' style='color: #ff4b4b; border-color: #ff4b4b;'>🏢 {hisse_kodu} | Veri Bulunamadı!</div>", unsafe_allow_html=True)
+
             # KAYNAK GÖSTERGESİ
             if "Yerel" in str(kaynak):
-                st.success(f"📡 **Veri Kaynağı:** {kaynak} | 📅 **Dönem:** {bulunan_donem} (En Taze Veri)")
+                st.success(f"📡 **Bağlantı Başarılı:** Veriler doğrudan {kaynak} üzerinden anlık olarak çekildi.")
             elif "Global" in str(kaynak):
-                st.warning(f"📡 **Veri Kaynağı:** {kaynak} | 📅 **Dönem:** {bulunan_donem} (Global sistem üzerinden çekildi)")
-            else:
-                st.error("📡 Hiçbir sunucudan veri alınamadı! Şirket kodu hatalı olabilir.")
+                st.warning(f"📡 **Bağlantı Bilgisi:** Yerel sunucu yanıt vermediği için veriler {kaynak} üzerinden kurtarıldı.")
 
             # TEMEL GÖSTERGELERİ ÇEKME
             son_fiyat = yedekli_fiyat_cek(hisse)
@@ -192,7 +198,6 @@ if analiz_butonu and hisse_kodu:
                 if not guncel_bilanco.empty:
                     bugun = datetime.today().strftime('%d.%m.%Y')
                     
-                    st.markdown(f"### 🎯 {hisse_kodu} Bilanço ve Gelecek Vizyonu Analizi")
                     st.markdown(f"**🗓️ Rapor Tarihi:** {bugun} | **Hazırlayan:** ***ALbANiAn_Trader*** ✅")
                     st.markdown("---")
                     
