@@ -66,7 +66,7 @@ def son_kap_haberleri(sembol):
         cevap = requests.get(url, timeout=4)
         root = ET.fromstring(cevap.text)
         haberler = []
-        for item in root.findall('.//item')[:4]:
+        for item in root.findall('.//item')[:5]: # Haber sayısını 5'e çıkardık
             title = item.find('title').text
             temiz_baslik = title.rsplit(' - ', 1)[0] if ' - ' in title else title
             haberler.append(f"📌 {temiz_baslik}")
@@ -103,8 +103,8 @@ with st.sidebar:
     st.markdown("---")
     
     st.title("Radar")
-    hisse_kodu = st.text_input("🔍 Hisse Kodu (Örn: THYAO):").upper()
-    analiz_butonu = st.button("📊 Analizi Başlat", type="primary", use_container_width=True)
+    hisse_kodu = st.text_input("🔍 Hisse Kodu (Örn: ASELS, THYAO):").upper()
+    analiz_butonu = st.button("📊 Kapsamlı Rapor Hazırla", type="primary", use_container_width=True)
     
     st.markdown("---")
     st.subheader("📢 Beni Takip Et")
@@ -117,7 +117,7 @@ with st.sidebar:
         </a>
         """, unsafe_allow_html=True
     )
-    st.caption("⚙️ Sistem: Önce Yerel, Sonra Global Motor")
+    st.caption("⚙️ Sistem: Profesyonel Kurumsal Rapor Modu Aktif")
 
 # ==========================================
 # 3. ANA EKRAN VE ANALİZ MANTIĞI
@@ -125,15 +125,14 @@ with st.sidebar:
 st.title("📈 Bilanço Robotu: Akıllı Finansal Terminal")
 
 if analiz_butonu and hisse_kodu:
-    with st.spinner(f"⏳ {hisse_kodu} için önce yerel, sonra global sunucular taranıyor..."):
+    with st.spinner(f"⏳ {hisse_kodu} için kapsamlı aracı kurum raporu formatında analiz hazırlanıyor. Bu biraz sürebilir..."):
         try:
             hisse = bp.Ticker(hisse_kodu)
             info = hisse.info
             
-            # --- MOTOR 1: YEREL SORGULAMA ---
+            # --- VERİ ÇEKME İŞLEMLERİ ---
             guncel_bilanco, bulunan_donem, kaynak = yerel_bilanco_cek(hisse_kodu)
             
-            # --- MOTOR 2: GLOBAL YEDEK ---
             if guncel_bilanco.empty:
                 try:
                     df_global = hisse.quarterly_income_stmt
@@ -149,7 +148,7 @@ if analiz_butonu and hisse_kodu:
 
             haberler_metni = son_kap_haberleri(hisse_kodu)
 
-            # --- KAYNAK GÖSTERGESİ ---
+            # KAYNAK BİLGİSİ
             if "Yerel" in str(kaynak):
                 st.success(f"📡 **Veri Kaynağı:** {kaynak} | 📅 **Dönem:** {bulunan_donem} (En Taze Veri)")
             elif "Global" in str(kaynak):
@@ -162,40 +161,57 @@ if analiz_butonu and hisse_kodu:
             fk_orani = info.get('trailingPE', "N/A")
             pddd_orani = info.get('priceToBook', "N/A")
 
+            pd_hesapli = f"{(piyasa_degeri / 1_000_000_000):.2f} Mrd ₺" if isinstance(piyasa_degeri, (int, float)) else "N/A"
+
             # --- ÜST BİLGİ KARTLARI ---
-            st.markdown("### 📌 Güncel Piyasa Çarpanları")
+            st.markdown("### 📌 Temel Göstergeler")
             c1, c2, c3, c4 = st.columns(4)
             c1.metric("Son Fiyat", f"{son_fiyat:.2f} ₺" if isinstance(son_fiyat, (int, float)) else "N/A")
-            if isinstance(piyasa_degeri, (int, float)):
-                c2.metric("Piyasa Değeri", f"{(piyasa_degeri / 1_000_000_000):.2f} Mrd ₺")
-            else: c2.metric("Piyasa Değeri", "-")
+            c2.metric("Piyasa Değeri", pd_hesapli)
             c3.metric("F/K Oranı", guvenli_format(fk_orani))
             c4.metric("PD/DD Oranı", guvenli_format(pddd_orani))
 
             st.divider()
 
             # --- SEKMELER ---
-            tab1, tab2, tab3 = st.tabs(["🎯 AI Bilanço Özeti", "📰 KAP & Haber Akışı", "📉 Fiyat Grafiği"])
+            tab1, tab2, tab3 = st.tabs(["📑 Kapsamlı Analiz Raporu", "📰 KAP & Haber Akışı", "📉 Mali Tablolar & Grafik"])
 
             with tab1:
                 if not guncel_bilanco.empty:
-                    st.subheader(f"🤖 Akıllı Bilanço Özeti: {hisse_kodu}")
+                    st.subheader(f"📑 {hisse_kodu} Kapsamlı Bilanço Analiz Raporu")
+                    st.caption(f"Yapay Zeka Destekli Kurumsal Değerlendirme | Dönem: {bulunan_donem}")
                     
+                    # --- İŞTE YENİ, DEVASA VE KURUMSAL PROMPT ---
                     istek = f"""
-                    Sen profesyonel ve modern bir borsa analistisin. Sana {hisse_kodu} hissesinin finansal tablosunu VE şirketin son KAP haberlerini veriyorum.
+                    Sen, üst düzey bir aracı kurumda çalışan (örneğin İş Yatırım veya GCM Yatırım) Kıdemli Hisse Senedi Analistisin.
+                    Aşağıda sana {hisse_kodu} hissesine ait en güncel ({bulunan_donem}) karşılaştırmalı finansal tabloyu, güncel piyasa çarpanlarını ve son dakika KAP haberlerini veriyorum.
                     
-                    Lütfen raporunu tamamen aşağıdaki yapıya sadık kalarak, kısa, net, vizyoner ve bol emojili bir "Yönetici Özeti" formatında hazırla:
-
-                    🎯 **1. Gelir Performansı:** (Satışlardaki durumu 📈/📉 emojileriyle tek cümlelik maddeler halinde yaz.)
-                    💰 **2. Kârlılık Durumu:** (Net kâr veya zarar durumunu 🟢/🔴 emojileriyle çok net belirt.)
-                    🚀 **3. Şirketin Güçlü Yönleri:** (Tabloya bakarak bulduğun en iyi 2 şeyi kısa madde olarak yaz.)
-                    ⚠️ **4. Riskler & Dikkat Edilecekler:** (Tabloya bakarak bulduğun en riskli 2 şeyi kısa madde olarak yaz.)
-                    📰 **5. Haber & KAP Etkisi:** (Aşağıdaki "Son Haberler" listesine bak. Bu haberlerin bilançoyu veya hisseyi nasıl etkileyeceğini 2-3 cümleyle cesurca yorumla.)
-                    💡 **6. Son Söz:** (Yatırımcıya tek cümlelik, objektif ve havalı bir analist kapanış notu bırak.)
-
-                    Kurallar: Uzun paragraflar KULLANMA.
+                    Senden istediğim şey kısa bir özet değil; son derece detaylı, ağırbaşlı, rakamlarla konuşan ve profesyonel bir "Kapsamlı Bilanço Analiz Raporu" yazmandır.
                     
-                    Finansal Veri:
+                    Raporun KESİNLİKLE aşağıdaki başlıklara ve yapıya sahip olmalıdır:
+
+                    **1. GELİR TABLOSU VE KÂRLILIK ANALİZİ**
+                    (Satış gelirlerindeki büyüme oranını, brüt/net kâr marjlarındaki değişimi tabloya bakarak detaylıca yorumla. Reel bir büyüme olup olmadığını değerlendir.)
+
+                    **2. BİLANÇO VE FİNANSAL YAPI DEĞERLENDİRMESİ**
+                    (Tablodaki kalemlerden yola çıkarak şirketin varlık büyümesi, özkaynak yapısı ve eğer veri varsa borçluluk durumu hakkında analitik yorumlar yap.)
+
+                    **3. STRATEJİK GELİŞMELER VE HABER AKIŞI**
+                    (Aşağıda verdiğim güncel haber başlıklarını analiz et. Şirketin aldığı ihaleler, yeni yatırımlar, sipariş defteri veya stratejik hamleleri varsa bunları detaylandırarak şirketin geleceğine etkisini açıkla.)
+
+                    **4. DEĞERLEME VE PİYASA ÇARPANLARI**
+                    (F/K Oranı: {guvenli_format(fk_orani)}, PD/DD Oranı: {guvenli_format(pddd_orani)}, Piyasa Değeri: {pd_hesapli}. Bu çarpanları değerlendir. Şirket pahalı mı, ucuz mu, yoksa büyüme beklentileri mi fiyatlanıyor? Detaylıca yorumla.)
+
+                    **5. GENEL DEĞERLENDİRME VE BEKLENTİLER**
+                    Bu bölümü iki alt başlığa ayırarak profesyonelce tamamla:
+                    * **Güçlü Yönler:** (Tablodan ve haberlerden çıkardığın en az 3 çok güçlü argüman)
+                    * **Dikkat Noktaları / Riskler:** (Yatırımcının dikkat etmesi gereken makro veya mikro en az 2 risk faktörü)
+
+                    Kurallar:
+                    - Rapor dili son derece resmi, objektif ve finansal terimlere hakim olmalıdır.
+                    - Asla hayali rakamlar uydurma, sadece aşağıdaki verileri kullan.
+                    
+                    Finansal Tablo Verileri:
                     {guncel_bilanco.to_markdown()}
                     
                     Son Haberler ve KAP Başlıkları:
@@ -209,25 +225,33 @@ if analiz_butonu and hisse_kodu:
                 st.caption(f"Google Haberler altyapısı kullanılarak {hisse_kodu} için KAP ve borsa haberleri taranmıştır.")
                 
                 if "bulunamadı" not in haberler_metni:
-                    st.success("Yeni haberler bulundu!")
+                    st.success("Analize dahil edilen son dakika haberleri:")
                     st.markdown(haberler_metni)
                 else:
                     st.warning(haberler_metni)
-                    
-                if not guncel_bilanco.empty:
-                    with st.expander("📊 Detaylı Mali Tabloyu Göster (İncelemek İsteyenler İçin)"):
-                        st.dataframe(guncel_bilanco, use_container_width=True)
 
             with tab3:
-                gecmis = hisse.history(period="6ay")
-                if not gecmis.empty:
-                    fig = go.Figure(data=[go.Candlestick(x=gecmis.index, open=gecmis['Open'], high=gecmis['High'], low=gecmis['Low'], close=gecmis['Close'])])
-                    fig.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False)
-                    st.plotly_chart(fig, use_container_width=True)
-                else:
-                    st.warning("Grafik verisi bulunamadı.")
+                st.subheader("📊 Mali Tablolar ve Fiyat Gelişimi")
+                col_a, col_b = st.columns(2)
+                
+                with col_a:
+                    st.write("**Detaylı Mali Tablo**")
+                    if not guncel_bilanco.empty:
+                        st.dataframe(guncel_bilanco, use_container_width=True, height=400)
+                    else:
+                        st.warning("Tablo verisi yok.")
+                        
+                with col_b:
+                    st.write("**Son 6 Aylık Fiyat Hareketi**")
+                    gecmis = hisse.history(period="6ay")
+                    if not gecmis.empty:
+                        fig = go.Figure(data=[go.Candlestick(x=gecmis.index, open=gecmis['Open'], high=gecmis['High'], low=gecmis['Low'], close=gecmis['Close'])])
+                        fig.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False, margin=dict(l=0, r=0, t=0, b=0))
+                        st.plotly_chart(fig, use_container_width=True)
+                    else:
+                        st.warning("Grafik verisi bulunamadı.")
 
         except Exception as e:
             st.error(f"Sistemsel bir hata oluştu. Hata Detayı: {e}")
 else:
-    st.info("👈 Analize başlamak için sol menüden hisse kodunu girin.")
+    st.info("👈 Kapsamlı kurumsal analize başlamak için sol menüden hisse kodunu girin.")
