@@ -38,24 +38,47 @@ st.markdown(
 API_SIFRESI = st.secrets["GEMINI_API_KEY"]
 client = genai.Client(api_key=API_SIFRESI)
 
-def guvenli_al(kaynak, anahtar):
+# ==========================================
+# AKILLI VERİ ÇEKME MODÜLLERİ (N/A ÇÖZÜCÜ)
+# ==========================================
+def yedekli_fiyat_cek(hisse):
+    """Fiyatı bulana kadar tüm kapıları zorlar."""
     try:
-        return kaynak.get(anahtar, "N/A")
+        # 1. Deneme: Anlık veri
+        fiyat = hisse.fast_info.get('last_price')
+        if fiyat: return fiyat
     except:
-        return "N/A"
+        pass
+    
+    try:
+        # 2. Deneme: Standart Info
+        fiyat = hisse.info.get('currentPrice')
+        if fiyat: return fiyat
+    except:
+        pass
+        
+    try:
+        # 3. Deneme: Grafik geçmişinden son kapanışı zorla alma
+        gecmis = hisse.history(period="5d")
+        if not gecmis.empty:
+            return gecmis['Close'].iloc[-1]
+    except:
+        pass
+        
+    return "N/A"
 
-# Sayısal değerleri güvenli formatlama fonksiyonu (HATAYI ÇÖZEN KISIM)
 def guvenli_format(deger):
+    """Rakam gelmezse çökmesini engeller."""
     if isinstance(deger, (int, float)):
         return f"{deger:.2f}"
-    return "N/A"
+    return "-"
 
 # ==========================================
 # 2. YAN MENÜ (REKLAM VE İMZA)
 # ==========================================
 with st.sidebar:
     try:
-        st.image("image_804263.png", use_container_width=True)
+        st.image("logo.png", use_container_width=True) # Logon varsa buraya koy
     except:
         st.markdown("### ***ALbANiAn_Trader*** ✅")
     
@@ -63,7 +86,7 @@ with st.sidebar:
     st.markdown("---")
     
     st.title("🤖 Robot Menüsü")
-    hisse_kodu = st.text_input("🔍 Hisse Kodu:", placeholder="Örn: ASELS").upper()
+    hisse_kodu = st.text_input("🔍 Hisse Kodu:", placeholder="Örn: RTALB, ASELS").upper()
     analiz_butonu = st.button("📊 Analizi Başlat", type="primary", use_container_width=True)
     
     st.markdown("---")
@@ -87,8 +110,6 @@ with st.sidebar:
         """,
         unsafe_allow_html=True
     )
-    st.markdown("---")
-    st.caption("🚀 Bilanço Robotu v2.1")
 
 # ==========================================
 # 3. ANA EKRAN VE ANALİZ MANTIĞI
@@ -96,34 +117,32 @@ with st.sidebar:
 st.title("📈 Bilanço Robotu: Akıllı Finansal Terminal")
 
 if analiz_butonu and hisse_kodu:
-    with st.spinner(f"⏳ {hisse_kodu} verileri KAP ve Borsa sistemlerinden çekiliyor..."):
+    with st.spinner(f"⏳ {hisse_kodu} verileri çekiliyor (Yedekli Sistem Aktif)..."):
         try:
             hisse = bp.Ticker(hisse_kodu)
             info = hisse.info
-            fast_info = hisse.fast_info
             
-            # Temel Göstergeler
-            son_fiyat = guvenli_al(fast_info, 'last_price')
-            piyasa_degeri = guvenli_al(fast_info, 'market_cap')
-            fk_orani = guvenli_al(info, 'trailingPE')
-            pddd_orani = guvenli_al(info, 'priceToBook')
+            # --- ZORLU VERİLERİ ÇEKME ---
+            son_fiyat = yedekli_fiyat_cek(hisse)
+            piyasa_degeri = info.get('marketCap') or hisse.fast_info.get('market_cap', "N/A")
+            fk_orani = info.get('trailingPE', "N/A")
+            pddd_orani = info.get('priceToBook', "N/A")
 
-            # Üst Bilgi Kartları (GÜNCELLENDİ)
+            # --- ÜST BİLGİ KARTLARI ---
             st.markdown("### 📌 Güncel Durum")
             c1, c2, c3, c4 = st.columns(4)
             
-            c1.metric("Son Fiyat", f"{son_fiyat} ₺" if son_fiyat != "N/A" else "N/A")
+            c1.metric("Son Fiyat", f"{son_fiyat:.2f} ₺" if isinstance(son_fiyat, (int, float)) else "N/A")
             
             if isinstance(piyasa_degeri, (int, float)):
                 c2.metric("Piyasa Değeri", f"{(piyasa_degeri / 1_000_000_000):.2f} Mrd ₺")
             else:
-                c2.metric("Piyasa Değeri", "N/A")
+                c2.metric("Piyasa Değeri", "-")
                 
             c3.metric("F/K Oranı", guvenli_format(fk_orani))
             c4.metric("PD/DD Oranı", guvenli_format(pddd_orani))
 
-            # Finansal Tablolar
-            yillik_gelir = hisse.income_stmt.iloc[:, :2]
+            # --- FİNANSAL TABLOLAR ---
             ceyrek_gelir = hisse.quarterly_income_stmt.iloc[:, :2]
 
             tab1, tab2, tab3 = st.tabs(["🧠 AI Bilanço Raporu", "📊 Mali Tablolar", "📉 Grafik"])
@@ -131,12 +150,9 @@ if analiz_butonu and hisse_kodu:
             with tab1:
                 st.subheader("Gemini 2.5 Pro Analiz Raporu")
                 istek = f"""
-                Sen kıdemli bir borsa analistisin. {hisse_kodu} hissesi için yıllık ve çeyreklik verileri analiz et.
-                ASELSAN gibi dev şirketlerin bakiye siparişleri ve büyüme ivmelerini göz önüne alarak yorum yap.
-                Raporu şu başlıklarla hazırla:
-                1. Gelir ve Karlılık Analizi
-                2. Borçluluk ve Finansal Sağlık
-                3. Yatırımcı İçin Güçlü Yönler ve Riskler
+                Sen kıdemli bir borsa analistisin. {hisse_kodu} hissesi için verileri analiz et.
+                Aşağıdaki çeyreklik gelir tablosuna bakarak gelir ve kârlılık büyümesini yorumla.
+                Eğer veri eksikse veya şirket zarar etmişse (F/K yoksa) bunu yatırımcıya net bir dille risk olarak belirt.
                 
                 Veriler:
                 {ceyrek_gelir.to_markdown()}
@@ -145,7 +161,10 @@ if analiz_butonu and hisse_kodu:
                 st.markdown(cevap.text)
 
             with tab2:
-                st.dataframe(ceyrek_gelir, use_container_width=True)
+                if not ceyrek_gelir.empty:
+                    st.dataframe(ceyrek_gelir, use_container_width=True)
+                else:
+                    st.warning("Bu hisse için güncel çeyreklik gelir tablosu global API'ye henüz yansımamış.")
 
             with tab3:
                 gecmis = hisse.history(period="6ay")
@@ -157,6 +176,6 @@ if analiz_butonu and hisse_kodu:
                     st.warning("Grafik verisi bulunamadı.")
 
         except Exception as e:
-            st.error(f"Veri çekilirken bir hata oluştu: {e}")
+            st.error(f"Sistemsel bir hata oluştu. Hisse kodunu doğru girdiğinizden emin olun. Hata Detayı: {e}")
 else:
     st.info("👈 Analize başlamak için sol menüden hisse kodunu girin.")
