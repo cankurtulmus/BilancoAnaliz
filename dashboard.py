@@ -9,7 +9,6 @@ import plotly.graph_objects as go
 # ==========================================
 st.set_page_config(page_title="Bilanço Robotu | Analiz Pro", page_icon="🚀", layout="wide")
 
-# Siyah Arka Plan ve Beyaz Yazı için Custom CSS
 st.markdown(
     """
     <style>
@@ -25,7 +24,7 @@ st.markdown(
         color: #FFFFFF !important;
     }
     .stMetricDelta > div {
-        color: #00FF00 !important; /* Pozitif değişimler yeşil */
+        color: #00FF00 !important;
     }
     button[kind="primary"] {
         background-color: #1DA1F2 !important;
@@ -36,21 +35,25 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# [cite_start]API Anahtarı (Streamlit Secrets üzerinden) [cite: 73]
 API_SIFRESI = st.secrets["GEMINI_API_KEY"]
 client = genai.Client(api_key=API_SIFRESI)
 
 def guvenli_al(kaynak, anahtar):
     try:
-        return kaynak[anahtar]
+        return kaynak.get(anahtar, "N/A")
     except:
         return "N/A"
+
+# Sayısal değerleri güvenli formatlama fonksiyonu (HATAYI ÇÖZEN KISIM)
+def guvenli_format(deger):
+    if isinstance(deger, (int, float)):
+        return f"{deger:.2f}"
+    return "N/A"
 
 # ==========================================
 # 2. YAN MENÜ (REKLAM VE İMZA)
 # ==========================================
 with st.sidebar:
-    # Designed by Kısmı (image_804263.png görselini kullanıyoruz)
     try:
         st.image("image_804263.png", use_container_width=True)
     except:
@@ -64,7 +67,6 @@ with st.sidebar:
     analiz_butonu = st.button("📊 Analizi Başlat", type="primary", use_container_width=True)
     
     st.markdown("---")
-    # X (Twitter) Reklam Alanı
     st.subheader("📢 Takip Et")
     st.markdown(
         f"""
@@ -86,7 +88,7 @@ with st.sidebar:
         unsafe_allow_html=True
     )
     st.markdown("---")
-    st.caption("🚀 Bilanço Robotu v2.0")
+    st.caption("🚀 Bilanço Robotu v2.1")
 
 # ==========================================
 # 3. ANA EKRAN VE ANALİZ MANTIĞI
@@ -100,20 +102,25 @@ if analiz_butonu and hisse_kodu:
             info = hisse.info
             fast_info = hisse.fast_info
             
-            # [cite_start]Temel Göstergeler [cite: 6]
+            # Temel Göstergeler
             son_fiyat = guvenli_al(fast_info, 'last_price')
             piyasa_degeri = guvenli_al(fast_info, 'market_cap')
             fk_orani = guvenli_al(info, 'trailingPE')
             pddd_orani = guvenli_al(info, 'priceToBook')
 
-            # Üst Bilgi Kartları
+            # Üst Bilgi Kartları (GÜNCELLENDİ)
             st.markdown("### 📌 Güncel Durum")
             c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Son Fiyat", f"{son_fiyat} ₺")
-            pd_mrd = float(piyasa_degeri) / 1_000_000_000 if piyasa_degeri != "N/A" else 0
-            c2.metric("Piyasa Değeri", f"{pd_mrd:.2f} Mrd ₺")
-            c3.metric("F/K Oranı", f"{fk_orani:.2f}" if type(fk_orani) != str else "N/A")
-            c4.metric("PD/DD Oranı", f"{pddd_orani:.2f}" if type(pddd_orani) != str else "N/A")
+            
+            c1.metric("Son Fiyat", f"{son_fiyat} ₺" if son_fiyat != "N/A" else "N/A")
+            
+            if isinstance(piyasa_degeri, (int, float)):
+                c2.metric("Piyasa Değeri", f"{(piyasa_degeri / 1_000_000_000):.2f} Mrd ₺")
+            else:
+                c2.metric("Piyasa Değeri", "N/A")
+                
+            c3.metric("F/K Oranı", guvenli_format(fk_orani))
+            c4.metric("PD/DD Oranı", guvenli_format(pddd_orani))
 
             # Finansal Tablolar
             yillik_gelir = hisse.income_stmt.iloc[:, :2]
@@ -123,7 +130,6 @@ if analiz_butonu and hisse_kodu:
 
             with tab1:
                 st.subheader("Gemini 2.5 Pro Analiz Raporu")
-                # AI'ya gönderilecek profesyonel prompt
                 istek = f"""
                 Sen kıdemli bir borsa analistisin. {hisse_kodu} hissesi için yıllık ve çeyreklik verileri analiz et.
                 ASELSAN gibi dev şirketlerin bakiye siparişleri ve büyüme ivmelerini göz önüne alarak yorum yap.
@@ -143,9 +149,12 @@ if analiz_butonu and hisse_kodu:
 
             with tab3:
                 gecmis = hisse.history(period="6ay")
-                fig = go.Figure(data=[go.Candlestick(x=gecmis.index, open=gecmis['Open'], high=gecmis['High'], low=gecmis['Low'], close=gecmis['Close'])])
-                fig.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False)
-                st.plotly_chart(fig, use_container_width=True)
+                if not gecmis.empty:
+                    fig = go.Figure(data=[go.Candlestick(x=gecmis.index, open=gecmis['Open'], high=gecmis['High'], low=gecmis['Low'], close=gecmis['Close'])])
+                    fig.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False)
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.warning("Grafik verisi bulunamadı.")
 
         except Exception as e:
             st.error(f"Veri çekilirken bir hata oluştu: {e}")
