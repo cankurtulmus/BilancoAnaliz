@@ -4,6 +4,7 @@ import requests
 from google import genai
 import pandas as pd
 import plotly.graph_objects as go
+import xml.etree.ElementTree as ET
 
 # ==========================================
 # 1. SAYFA VE TASARIM AYARLARI (DARK MODE)
@@ -18,7 +19,6 @@ st.markdown(
     .stTab, .stMetric, .stMarkdown, .stSubheader, .stTitle, p, h1, h2, h3, li { color: #FFFFFF !important; }
     .stMetricDelta > div { color: #00FF00 !important; }
     button[kind="primary"] { background-color: #1DA1F2 !important; border: none !important; }
-    /* Yapay zeka raporundaki vurguları güzelleştiren özel ayar */
     strong { color: #1DA1F2 !important; } 
     </style>
     """,
@@ -29,9 +29,10 @@ API_SIFRESI = st.secrets["GEMINI_API_KEY"]
 client = genai.Client(api_key=API_SIFRESI)
 
 # ==========================================
-# AKILLI MELEZ (HYBRID) VERİ ÇEKME MODÜLLERİ
+# AKILLI ÇİFT KADEMELİ (YEREL -> GLOBAL) MOTORLAR
 # ==========================================
 def yerel_bilanco_cek(sembol):
+    """KADEME 1: Türkiye sunucularını (İş Yatırım) zorlar."""
     url = "https://www.isyatirim.com.tr/_layouts/15/IsYatirim.Website/Common/Data.aspx/MaliTablo"
     donemler = [
         ("2025", "12", "2024", "12"), ("2025", "9", "2024", "9"),
@@ -46,8 +47,8 @@ def yerel_bilanco_cek(sembol):
                 "year1": y1, "period1": p1, "year2": y2, "period2": p2
             }
             try:
-                headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
-                cevap = requests.get(url, params=params, headers=headers, timeout=5)
+                headers = {'User-Agent': 'Mozilla/5.0'}
+                cevap = requests.get(url, params=params, headers=headers, timeout=4)
                 veri = cevap.json().get('value', [])
                 if veri:
                     df = pd.DataFrame(veri)[['itemDescTr', 'value1', 'value2']]
@@ -55,12 +56,29 @@ def yerel_bilanco_cek(sembol):
                     gecmis_ceyrek_adi = f"Q{int(p2)//3}"
                     df.columns = ['Finansal Kalem', f'{y1} {ceyrek_adi}', f'{y2} {gecmis_ceyrek_adi}']
                     df = df[df[f'{y1} {ceyrek_adi}'].notna()].reset_index(drop=True)
-                    return df, f"{y1} {ceyrek_adi}", "İş Yatırım (Yerel)"
+                    return df, f"{y1} {ceyrek_adi}", "🇹🇷 İş Yatırım (Yerel Sunucu)"
             except:
                 continue
     return pd.DataFrame(), None, None
 
+def son_kap_haberleri(sembol):
+    """Hisseye ait son KAP ve haber başlıklarını çeker."""
+    url = f"https://news.google.com/rss/search?q={sembol}+hisse+KAP+haberleri&hl=tr&gl=TR&ceid=TR:tr"
+    try:
+        cevap = requests.get(url, timeout=4)
+        root = ET.fromstring(cevap.text)
+        haberler = []
+        for item in root.findall('.//item')[:4]:
+            title = item.find('title').text
+            temiz_baslik = title.rsplit(' - ', 1)[0] if ' - ' in title else title
+            haberler.append(f"📌 {temiz_baslik}")
+        if haberler:
+            return "\n".join(haberler)
+    except: pass
+    return "Şirketle ilgili son 24 saate ait önemli bir haber akışı bulunamadı."
+
 def yedekli_fiyat_cek(hisse):
+    """Fiyatı bulana kadar farklı kapıları dener."""
     try:
         fiyat = hisse.fast_info.get('last_price')
         if fiyat: return fiyat
@@ -76,7 +94,7 @@ def guvenli_format(deger):
     return "-"
 
 # ==========================================
-# 2. YAN MENÜ (REKLAM, LOGO VE İMZA)
+# 2. YAN MENÜ (REKLAM VE ARAMA)
 # ==========================================
 with st.sidebar:
     try:
@@ -87,8 +105,8 @@ with st.sidebar:
     st.markdown("<p style='text-align: center; font-size: 0.8em;'>Designed by ALbANiAn_Trader ✅</p>", unsafe_allow_html=True)
     st.markdown("---")
     
-    st.title("Arama Motoru")
-    hisse_kodu = st.text_input("🔍 Hisse Kodu (Örn: RTALB, THYAO):").upper()
+    st.title("Radar")
+    hisse_kodu = st.text_input("🔍 Hisse Kodu (Örn: THYAO):").upper()
     analiz_butonu = st.button("📊 Analizi Başlat", type="primary", use_container_width=True)
     
     st.markdown("---")
@@ -102,6 +120,7 @@ with st.sidebar:
         </a>
         """, unsafe_allow_html=True
     )
+    st.caption("⚙️ Sistem: Önce Yerel, Sonra Global Motor")
 
 # ==========================================
 # 3. ANA EKRAN VE ANALİZ MANTIĞI
@@ -109,14 +128,15 @@ with st.sidebar:
 st.title("📈 Bilanço Robotu: Akıllı Finansal Terminal")
 
 if analiz_butonu and hisse_kodu:
-    with st.spinner(f"⏳ {hisse_kodu} verileri taranıyor ve görsel rapor hazırlanıyor..."):
+    with st.spinner(f"⏳ {hisse_kodu} için önce yerel, sonra global sunucular taranıyor..."):
         try:
             hisse = bp.Ticker(hisse_kodu)
             info = hisse.info
             
-            # --- MOTOR 1 & 2 ---
+            # --- MOTOR 1: YEREL SORGULAMA ---
             guncel_bilanco, bulunan_donem, kaynak = yerel_bilanco_cek(hisse_kodu)
             
+            # --- MOTOR 2: GLOBAL YEDEK (Yerel başarısız olursa devreye girer) ---
             if guncel_bilanco.empty:
                 try:
                     df_global = hisse.quarterly_income_stmt
@@ -127,8 +147,18 @@ if analiz_butonu and hisse_kodu:
                         df_global.columns = ["Finansal Kalem", f"Güncel ({col1})", f"Geçmiş ({col2})"]
                         guncel_bilanco = df_global
                         bulunan_donem = f"Global Son Çeyrek"
-                        kaynak = "Borsa Global API"
+                        kaynak = "🌍 Borsa Global API (Yedek Sunucu)"
                 except: pass
+
+            haberler_metni = son_kap_haberleri(hisse_kodu)
+
+            # --- KAYNAK GÖSTERGESİ (Senin vizyonun) ---
+            if "Yerel" in str(kaynak):
+                st.success(f"📡 **Veri Kaynağı:** {kaynak} | 📅 **Dönem:** {bulunan_donem} (En Taze Veri)")
+            elif "Global" in str(kaynak):
+                st.warning(f"📡 **Veri Kaynağı:** {kaynak} | 📅 **Dönem:** {bulunan_donem} (Yerel sunucu yanıt vermedi, globalden çekildi)")
+            else:
+                st.error("📡 Hiçbir sunucudan (Yerel veya Global) veri alınamadı!")
 
             son_fiyat = yedekli_fiyat_cek(hisse)
             piyasa_degeri = info.get('marketCap') or hisse.fast_info.get('market_cap', "N/A")
@@ -145,57 +175,38 @@ if analiz_butonu and hisse_kodu:
             c3.metric("F/K Oranı", guvenli_format(fk_orani))
             c4.metric("PD/DD Oranı", guvenli_format(pddd_orani))
 
-            st.divider() # Araya şık bir çizgi çektik
+            st.divider()
 
             # --- SEKMELER ---
-            tab1, tab2, tab3 = st.tabs(["🎯 AI Bilanço Özeti", "📊 Mali Tablolar", "📉 Fiyat Grafiği"])
+            tab1, tab2, tab3 = st.tabs(["🎯 AI Bilanço Özeti", "📰 KAP & Haber Akışı", "📉 Fiyat Grafiği"])
 
             with tab1:
                 if not guncel_bilanco.empty:
                     st.subheader(f"🤖 Akıllı Bilanço Özeti: {hisse_kodu}")
-                    st.info(f"📍 **Veri Kaynağı:** {kaynak} | 📅 **İncelenen Dönem:** {bulunan_donem}")
                     
-                    # --- İŞTE YENİ GÖRSEL VE VURUCU PROMPT ---
                     istek = f"""
-                    Sen profesyonel ve modern bir borsa analistisin. Sana {hisse_kodu} hissesinin ({kaynak}) kaynaklı ({bulunan_donem}) karşılaştırmalı finansal tablosunu veriyorum.
+                    Sen profesyonel ve modern bir borsa analistisin. Sana {hisse_kodu} hissesinin finansal tablosunu VE şirketin son KAP haberlerini veriyorum.
                     
-                    Lütfen raporunu "Sıkıcı bir mektup" ŞEKLİNDE DEĞİL, tamamen aşağıdaki yapıya sadık kalarak, kısa, net, vizyoner ve bol emojili bir "Yönetici Özeti" formatında hazırla:
+                    Lütfen raporunu tamamen aşağıdaki yapıya sadık kalarak, kısa, net, vizyoner ve bol emojili bir "Yönetici Özeti" formatında hazırla:
 
-                    🎯 **1. Gelir Performansı:** (Satışlardaki artış/azalış durumunu yüzdesel tahminlerle ve 📈/📉 emojileriyle tek cümlelik maddeler halinde yaz.)
-                    💰 **2. Kârlılık Durumu:** (Net kâr veya zarar durumunu, önceki döneme göre gelişimini 🟢/🔴 emojileriyle çok net belirt.)
+                    🎯 **1. Gelir Performansı:** (Satışlardaki durumu 📈/📉 emojileriyle tek cümlelik maddeler halinde yaz.)
+                    💰 **2. Kârlılık Durumu:** (Net kâr veya zarar durumunu 🟢/🔴 emojileriyle çok net belirt.)
                     🚀 **3. Şirketin Güçlü Yönleri:** (Tabloya bakarak bulduğun en iyi 2 şeyi kısa madde olarak yaz.)
                     ⚠️ **4. Riskler & Dikkat Edilecekler:** (Tabloya bakarak bulduğun en riskli 2 şeyi kısa madde olarak yaz.)
-                    💡 **5. Son Söz:** (Yatırımcıya tek cümlelik, objektif ve havalı bir analist kapanış notu bırak.)
+                    📰 **5. Haber & KAP Etkisi:** (Aşağıdaki "Son Haberler" listesine bak. Bu haberlerin bilançoyu veya hisseyi nasıl etkileyeceğini 2-3 cümleyle cesurca yorumla.)
+                    💡 **6. Son Söz:** (Yatırımcıya tek cümlelik, objektif ve havalı bir analist kapanış notu bırak.)
 
-                    Kurallar:
-                    - Uzun paragraflar KULLANMA.
-                    - Sadece maddeler (bullet points) ve kalın yazılar (bold) kullan.
+                    Kurallar: Uzun paragraflar KULLANMA.
                     
                     Finansal Veri:
                     {guncel_bilanco.to_markdown()}
+                    
+                    Son Haberler ve KAP Başlıkları:
+                    {haberler_metni}
                     """
                     cevap = client.models.generate_content(model='gemini-2.5-flash', contents=istek)
                     st.markdown(cevap.text)
-                else:
-                    st.error("Bu şirkete ait herhangi bir finansal veri (ne yerel ne global) bulunamadı.")
 
             with tab2:
-                if not guncel_bilanco.empty:
-                    st.success(f"✅ Bilanço verisi başarıyla **{kaynak}** üzerinden çekildi.")
-                    st.dataframe(guncel_bilanco, use_container_width=True, height=600)
-                else:
-                    st.warning("Gösterilecek tablo bulunamadı.")
-
-            with tab3:
-                gecmis = hisse.history(period="6ay")
-                if not gecmis.empty:
-                    fig = go.Figure(data=[go.Candlestick(x=gecmis.index, open=gecmis['Open'], high=gecmis['High'], low=gecmis['Low'], close=gecmis['Close'])])
-                    fig.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False)
-                    st.plotly_chart(fig, use_container_width=True)
-                else:
-                    st.warning("Grafik verisi bulunamadı.")
-
-        except Exception as e:
-            st.error(f"Sistemsel bir hata oluştu. Hata Detayı: {e}")
-else:
-    st.info("👈 Analize başlamak için sol menüden hisse kodunu girin.")
+                st.subheader("📰 Son Dakika Haber Radar Sistemi")
+                st.caption(f"Google Haberler altyapısı kullanılarak {hisse_kodu} için KAP ve borsa
