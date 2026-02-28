@@ -27,7 +27,7 @@ st.markdown(
     .x-button { background-color: #000000; color: #1DA1F2; border: 1px solid #1DA1F2; padding: 10px; border-radius: 8px; text-align: center; font-weight: bold; transition: all 0.3s ease; }
     .x-button:hover { background-color: #1DA1F2; color: #ffffff; }
     
-    /* YENİ: En Üstteki Devasa Şirket ve Dönem Başlığı İçin */
+    /* En Üstteki Devasa Şirket ve Dönem Başlığı İçin */
     .terminal-header { text-align: center; color: #1DA1F2; font-size: 32px; font-weight: 900; border-bottom: 2px solid #1DA1F2; padding-bottom: 15px; margin-top: 10px; margin-bottom: 20px; }
     </style>
     """,
@@ -38,7 +38,7 @@ API_SIFRESI = st.secrets["GEMINI_API_KEY"]
 client = genai.Client(api_key=API_SIFRESI)
 
 # ==========================================
-# AKILLI ÇİFT KADEMELİ MOTORLAR (HIZLI GEÇİŞ)
+# AKILLI ÇİFT KADEMELİ MOTORLAR
 # ==========================================
 def yerel_bilanco_cek(sembol):
     url = "https://www.isyatirim.com.tr/_layouts/15/IsYatirim.Website/Common/Data.aspx/MaliTablo"
@@ -145,23 +145,33 @@ if analiz_butonu and hisse_kodu:
             # --- MOTOR 1 (YEREL SORGULAMA) ---
             guncel_bilanco, bulunan_donem, kaynak = yerel_bilanco_cek(hisse_kodu)
             
-            # --- MOTOR 2 (GLOBAL YEDEK SORGULAMA) ---
+            # --- MOTOR 2 (GLOBAL YEDEK SORGULAMA - AKILLI TARİH ÇÖZÜCÜ EKLENDİ) ---
             if guncel_bilanco.empty:
                 try:
                     df_global = hisse.quarterly_income_stmt
                     if not df_global.empty and len(df_global.columns) >= 2:
                         df_global = df_global.iloc[:, :2].reset_index()
-                        col1 = str(df_global.columns[1])[:10]
-                        col2 = str(df_global.columns[2])[:10]
-                        df_global.columns = ["Finansal Kalem", f"Güncel ({col1})", f"Geçmiş ({col2})"]
+                        
+                        tarih_guncel = str(df_global.columns[1])[:10]
+                        tarih_gecmis = str(df_global.columns[2])[:10]
+                        df_global.columns = ["Finansal Kalem", f"Güncel ({tarih_guncel})", f"Geçmiş ({tarih_gecmis})"]
                         guncel_bilanco = df_global
-                        bulunan_donem = f"Global Son Çeyrek"
+                        
+                        # Tarihi "2024-09-30" formatından "2024 Q3" formatına dönüştüren akıllı kod
+                        try:
+                            yil = tarih_guncel[:4]
+                            ay = int(tarih_guncel[5:7])
+                            ceyrek = (ay - 1) // 3 + 1
+                            bulunan_donem = f"{yil} Q{ceyrek}"
+                        except:
+                            bulunan_donem = "Global Son Çeyrek"
+                            
                         kaynak = "🌍 Borsa Global API (Yedek Sunucu)"
                 except: pass
 
             haberler_metni = son_kap_haberleri(hisse_kodu)
 
-            # --- YENİ: DEVASA VE ŞIK BAŞLIK (DÖNEM BURADA YAZACAK) ---
+            # --- DEVASA VE ŞIK BAŞLIK ---
             if not guncel_bilanco.empty:
                 st.markdown(f"<div class='terminal-header'>🏢 {hisse_kodu} | 📅 {bulunan_donem} BİLANÇOSU</div>", unsafe_allow_html=True)
             else:
@@ -201,7 +211,6 @@ if analiz_butonu and hisse_kodu:
                     st.markdown(f"**🗓️ Rapor Tarihi:** {bugun} | **Hazırlayan:** ***ALbANiAn_Trader*** ✅")
                     st.markdown("---")
                     
-                    # ALbANiAn_Trader ÖZEL PROMPT
                     istek = f"""
                     Sen, piyasaların yakından takip ettiği usta borsa analisti ve stratejisti 'ALbANiAn_Trader'sın.
                     Aşağıda sana {hisse_kodu} hissesine ait en güncel ({bulunan_donem}) finansal tabloyu, piyasa çarpanlarını ve son dakika KAP haberlerini veriyorum.
