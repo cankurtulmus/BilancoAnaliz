@@ -27,53 +27,41 @@ API_SIFRESI = st.secrets["GEMINI_API_KEY"]
 client = genai.Client(api_key=API_SIFRESI)
 
 # ==========================================
-# AKILLI VE YEREL VERİ ÇEKME MODÜLLERİ
+# AKILLI MELEZ (HYBRID) VERİ ÇEKME MODÜLLERİ
 # ==========================================
 def yerel_bilanco_cek(sembol):
-    """En güncel bilançoyu bulana kadar geçmiş dönemleri tarar."""
+    """Önce İş Yatırım'ı dener."""
     url = "https://www.isyatirim.com.tr/_layouts/15/IsYatirim.Website/Common/Data.aspx/MaliTablo"
-    
-    # En güncelden geriye doğru tarama listesi (2025 Q4 -> 2025 Q3 -> 2025 Q2...)
     donemler = [
-        ("2025", "12", "2024", "12"),
-        ("2025", "9", "2024", "9"),
-        ("2025", "6", "2024", "6"),
-        ("2025", "3", "2024", "3"),
+        ("2025", "12", "2024", "12"), ("2025", "9", "2024", "9"),
+        ("2025", "6", "2024", "6"), ("2025", "3", "2024", "3"),
         ("2024", "12", "2023", "12")
     ]
     
     for tablo_tipi in ["XI_29", "UFRS"]:
         for y1, p1, y2, p2 in donemler:
             params = {
-                "companyCode": sembol,
-                "exchange": "TRY",
-                "financialGroup": tablo_tipi,
-                "year1": y1,
-                "period1": p1,
-                "year2": y2,
-                "period2": p2
+                "companyCode": sembol, "exchange": "TRY", "financialGroup": tablo_tipi,
+                "year1": y1, "period1": p1, "year2": y2, "period2": p2
             }
             try:
-                cevap = requests.get(url, params=params, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5)
+                # Bot olmadığımızı kanıtlamak için daha gelişmiş bir başlık ekliyoruz
+                headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+                cevap = requests.get(url, params=params, headers=headers, timeout=5)
                 veri = cevap.json().get('value', [])
                 if veri:
                     df = pd.DataFrame(veri)[['itemDescTr', 'value1', 'value2']]
-                    
-                    # Bulunan çeyreği isimlendir
                     ceyrek_adi = f"Q{int(p1)//3}"
                     gecmis_ceyrek_adi = f"Q{int(p2)//3}"
-                    
                     df.columns = ['Finansal Kalem', f'{y1} {ceyrek_adi}', f'{y2} {gecmis_ceyrek_adi}']
                     df = df[df[f'{y1} {ceyrek_adi}'].notna()].reset_index(drop=True)
-                    
-                    return df, f"{y1} {ceyrek_adi}" # Tabloyu ve dönemi geri döndür
+                    return df, f"{y1} {ceyrek_adi}", "İş Yatırım (Yerel)"
             except:
                 continue
-                
-    return pd.DataFrame(), None
+    return pd.DataFrame(), None, None
 
 def yedekli_fiyat_cek(hisse):
-    """Fiyat gelmezse grafikten dünün kapanışını zorla alır."""
+    """Fiyatı zorla bulur."""
     try:
         fiyat = hisse.fast_info.get('last_price')
         if fiyat: return fiyat
@@ -101,7 +89,7 @@ with st.sidebar:
     st.markdown("---")
     
     st.title("Arama Motoru")
-    hisse_kodu = st.text_input("🔍 Hisse Kodu (Örn: RTALB, ASELS):").upper()
+    hisse_kodu = st.text_input("🔍 Hisse Kodu (Örn: RTALB, THYAO):").upper()
     analiz_butonu = st.button("📊 Analizi Başlat", type="primary", use_container_width=True)
     
     st.markdown("---")
@@ -115,7 +103,6 @@ with st.sidebar:
         </a>
         """, unsafe_allow_html=True
     )
-    st.caption("🇹🇷 Veriler yerel aracı kurum servislerinden anlık çekilir.")
 
 # ==========================================
 # 3. ANA EKRAN VE ANALİZ MANTIĞI
@@ -123,14 +110,29 @@ with st.sidebar:
 st.title("📈 Bilanço Robotu: Akıllı Finansal Terminal")
 
 if analiz_butonu and hisse_kodu:
-    with st.spinner(f"⏳ {hisse_kodu} için Türkiye sunucularından en güncel bilanço aranıyor..."):
+    with st.spinner(f"⏳ {hisse_kodu} verileri taranıyor (Melez Motor Devrede)..."):
         try:
             hisse = bp.Ticker(hisse_kodu)
             info = hisse.info
             
-            # --- AKILLI BİLANÇO AVCISI ---
-            guncel_bilanco, bulunan_donem = yerel_bilanco_cek(hisse_kodu)
+            # --- MOTOR 1: İŞ YATIRIM DENEMESİ ---
+            guncel_bilanco, bulunan_donem, kaynak = yerel_bilanco_cek(hisse_kodu)
             
+            # --- MOTOR 2: GLOBAL YEDEK (İŞ YATIRIM ÇÖKERSE DEVREYE GİRER) ---
+            if guncel_bilanco.empty:
+                try:
+                    df_global = hisse.quarterly_income_stmt
+                    if not df_global.empty and len(df_global.columns) >= 2:
+                        df_global = df_global.iloc[:, :2].reset_index()
+                        col1 = str(df_global.columns[1])[:10]
+                        col2 = str(df_global.columns[2])[:10]
+                        df_global.columns = ["Finansal Kalem", f"Güncel ({col1})", f"Geçmiş ({col2})"]
+                        guncel_bilanco = df_global
+                        bulunan_donem = f"Global Son Çeyrek"
+                        kaynak = "Borsa Global API"
+                except:
+                    pass
+
             # --- ZORLU FİYAT/ÇARPAN VERİLERİ ---
             son_fiyat = yedekli_fiyat_cek(hisse)
             piyasa_degeri = info.get('marketCap') or hisse.fast_info.get('market_cap', "N/A")
@@ -149,17 +151,17 @@ if analiz_butonu and hisse_kodu:
             c4.metric("PD/DD Oranı", guvenli_format(pddd_orani))
 
             # --- SEKMELER ---
-            tab1, tab2, tab3 = st.tabs(["🧠 AI Bilanço Raporu", "📊 KAP Mali Tablolar (En Güncel)", "📉 Fiyat Grafiği"])
+            tab1, tab2, tab3 = st.tabs(["🧠 AI Bilanço Raporu", "📊 Mali Tablolar", "📉 Fiyat Grafiği"])
 
             with tab1:
                 if not guncel_bilanco.empty:
-                    st.subheader(f"🤖 Yapay Zeka Raporu: {hisse_kodu} ({bulunan_donem})")
+                    st.subheader(f"🤖 Yapay Zeka Raporu: {hisse_kodu}")
+                    st.caption(f"Veri Kaynağı: {kaynak} | Dönem: {bulunan_donem}")
                     istek = f"""
-                    Sen profesyonel bir borsa analistisin. Sana {hisse_kodu} hissesinin Türkiye'den çekilmiş en güncel ({bulunan_donem}) karşılaştırmalı finansal tablosunu veriyorum.
-                    Lütfen şu tabloya bakarak:
-                    1. Satış gelirlerindeki artışı/azalışı yorumla.
-                    2. Şirketin Dönem Net Kârı / Zararı durumunu net bir dille açıkla.
-                    3. Yatırımcı için çok net 2 tane "Güçlü Yön" ve 2 tane "Risk/Dikkat Edilmesi Gereken Nokta" çıkar.
+                    Sen profesyonel bir borsa analistisin. Sana {hisse_kodu} hissesinin ({kaynak}) kaynaklı ({bulunan_donem}) karşılaştırmalı finansal tablosunu veriyorum.
+                    1. Gelir/Satışlardaki durumu yorumla.
+                    2. Kârlılık veya Zarar durumunu açıkla.
+                    3. 2 tane "Güçlü Yön" ve 2 tane "Risk" çıkar.
                     
                     Finansal Veri:
                     {guncel_bilanco.to_markdown()}
@@ -167,14 +169,14 @@ if analiz_butonu and hisse_kodu:
                     cevap = client.models.generate_content(model='gemini-2.5-flash', contents=istek)
                     st.markdown(cevap.text)
                 else:
-                    st.warning("Bu şirketin finansal verileri şu an yerel sunucularda bulunamıyor veya bakım çalışması yapılıyor.")
+                    st.error("Bu şirkete ait herhangi bir finansal veri (ne yerel ne global) bulunamadı.")
 
             with tab2:
                 if not guncel_bilanco.empty:
-                    st.success(f"Aşağıdaki veriler doğrudan Türkiye'deki yerel aracı kurum veri tabanından anlık olarak çekilmiştir. En son açıklanan bilanço: **{bulunan_donem}**")
+                    st.success(f"Bilanço verisi başarıyla **{kaynak}** üzerinden çekildi.")
                     st.dataframe(guncel_bilanco, use_container_width=True, height=600)
                 else:
-                    st.warning("Güncel bilanço verisi bulunamadı.")
+                    st.warning("Gösterilecek tablo bulunamadı.")
 
             with tab3:
                 gecmis = hisse.history(period="6ay")
