@@ -5,6 +5,7 @@ from google import genai
 import pandas as pd
 import plotly.graph_objects as go
 import xml.etree.ElementTree as ET
+from datetime import datetime
 
 # ==========================================
 # 1. SAYFA VE TASARIM AYARLARI (DARK MODE)
@@ -66,7 +67,7 @@ def son_kap_haberleri(sembol):
         cevap = requests.get(url, timeout=4)
         root = ET.fromstring(cevap.text)
         haberler = []
-        for item in root.findall('.//item')[:5]: # Haber sayısını 5'e çıkardık
+        for item in root.findall('.//item')[:5]:
             title = item.find('title').text
             temiz_baslik = title.rsplit(' - ', 1)[0] if ' - ' in title else title
             haberler.append(f"📌 {temiz_baslik}")
@@ -104,7 +105,7 @@ with st.sidebar:
     
     st.title("Radar")
     hisse_kodu = st.text_input("🔍 Hisse Kodu (Örn: ASELS, THYAO):").upper()
-    analiz_butonu = st.button("📊 Kapsamlı Rapor Hazırla", type="primary", use_container_width=True)
+    analiz_butonu = st.button("📊 ALbANiAn Analizini Başlat", type="primary", use_container_width=True)
     
     st.markdown("---")
     st.subheader("📢 Beni Takip Et")
@@ -117,7 +118,7 @@ with st.sidebar:
         </a>
         """, unsafe_allow_html=True
     )
-    st.caption("⚙️ Sistem: Profesyonel Kurumsal Rapor Modu Aktif")
+    st.caption("⚙️ Mod: ALbANiAn_Trader Premium Rapor")
 
 # ==========================================
 # 3. ANA EKRAN VE ANALİZ MANTIĞI
@@ -125,7 +126,7 @@ with st.sidebar:
 st.title("📈 Bilanço Robotu: Akıllı Finansal Terminal")
 
 if analiz_butonu and hisse_kodu:
-    with st.spinner(f"⏳ {hisse_kodu} için kapsamlı aracı kurum raporu formatında analiz hazırlanıyor. Bu biraz sürebilir..."):
+    with st.spinner(f"⏳ {hisse_kodu} için şık, emojili ve detaylı analiz hazırlanıyor. Lütfen bekleyin..."):
         try:
             hisse = bp.Ticker(hisse_kodu)
             info = hisse.info
@@ -174,42 +175,57 @@ if analiz_butonu and hisse_kodu:
             st.divider()
 
             # --- SEKMELER ---
-            tab1, tab2, tab3 = st.tabs(["📑 Kapsamlı Analiz Raporu", "📰 KAP & Haber Akışı", "📉 Mali Tablolar & Grafik"])
+            tab1, tab2, tab3 = st.tabs(["📑 ALbANiAn VIP Analiz", "📰 KAP & Haber Akışı", "📉 Mali Tablolar & Grafik"])
 
             with tab1:
                 if not guncel_bilanco.empty:
-                    st.subheader(f"📑 {hisse_kodu} Kapsamlı Bilanço Analiz Raporu")
-                    st.caption(f"Yapay Zeka Destekli Kurumsal Değerlendirme | Dönem: {bulunan_donem}")
+                    # --- OTOMATİK TARİH VE LOGOLU İMZA ALANI ---
+                    bugun = datetime.today().strftime('%d.%m.%Y')
                     
-                    # --- İŞTE YENİ, DEVASA VE KURUMSAL PROMPT ---
+                    st.markdown(f"### 🎯 {hisse_kodu} Bilanço ve Gelecek Vizyonu Analizi")
+                    st.markdown(f"**🗓️ Rapor Tarihi:** {bugun}")
+                    
+                    col_logo, col_text = st.columns([1, 15])
+                    with col_logo:
+                        try:
+                            # Eğer klasörde logo.png varsa onu çok şık bir boyutta gösterir
+                            st.image("logo.png", width=40) 
+                        except:
+                            st.markdown("✅")
+                    with col_text:
+                        st.markdown("**Hazırlayan:** ***ALbANiAn_Trader***")
+                        
+                    st.markdown("---")
+                    
+                    # --- YENİ, ŞIK VE EMOJİLİ PROMPT ---
                     istek = f"""
-                    Sen, üst düzey bir aracı kurumda çalışan (örneğin İş Yatırım veya GCM Yatırım) Kıdemli Hisse Senedi Analistisin.
-                    Aşağıda sana {hisse_kodu} hissesine ait en güncel ({bulunan_donem}) karşılaştırmalı finansal tabloyu, güncel piyasa çarpanlarını ve son dakika KAP haberlerini veriyorum.
+                    Sen, piyasaların yakından takip ettiği usta borsa analisti ve stratejisti 'ALbANiAn_Trader'sın.
+                    Aşağıda sana {hisse_kodu} hissesine ait en güncel ({bulunan_donem}) finansal tabloyu, piyasa çarpanlarını ve son dakika KAP haberlerini veriyorum.
                     
-                    Senden istediğim şey kısa bir özet değil; son derece detaylı, ağırbaşlı, rakamlarla konuşan ve profesyonel bir "Kapsamlı Bilanço Analiz Raporu" yazmandır.
-                    
-                    Raporun KESİNLİKLE aşağıdaki başlıklara ve yapıya sahip olmalıdır:
+                    Senden istediğim şey; rakamların derinliğine inen AMA okuması çok keyifli, şık, bol emojili ve kesinlikle "sıkıcı bir mektup" GİBİ OLMAYAN profesyonel bir analiz raporu yazmandır.
 
-                    **1. GELİR TABLOSU VE KÂRLILIK ANALİZİ**
-                    (Satış gelirlerindeki büyüme oranını, brüt/net kâr marjlarındaki değişimi tabloya bakarak detaylıca yorumla. Reel bir büyüme olup olmadığını değerlendir.)
+                    Raporun KESİNLİKLE aşağıdaki başlıklara ve yapıya sahip olmalıdır (Her başlık altında uzun paragraflar yerine net, vurucu maddeler kullan):
 
-                    **2. BİLANÇO VE FİNANSAL YAPI DEĞERLENDİRMESİ**
-                    (Tablodaki kalemlerden yola çıkarak şirketin varlık büyümesi, özkaynak yapısı ve eğer veri varsa borçluluk durumu hakkında analitik yorumlar yap.)
+                    📊 **1. GELİR VE KÂRLILIK ANALİZİ**
+                    (Satış büyümesi ve kâr marjlarındaki değişimi 📈/📉 emojileriyle, tek cümlelik net maddeler halinde yorumla. Reel bir büyüme var mı?)
 
-                    **3. STRATEJİK GELİŞMELER VE HABER AKIŞI**
-                    (Aşağıda verdiğim güncel haber başlıklarını analiz et. Şirketin aldığı ihaleler, yeni yatırımlar, sipariş defteri veya stratejik hamleleri varsa bunları detaylandırarak şirketin geleceğine etkisini açıkla.)
+                    ⚖️ **2. FİNANSAL YAPI VE BİLANÇO**
+                    (Varlıklar, özkaynaklar ve borçluluk durumunu 🟢/🔴/🟡 emojileriyle açık, kısa maddeler halinde değerlendir.)
 
-                    **4. DEĞERLEME VE PİYASA ÇARPANLARI**
-                    (F/K Oranı: {guvenli_format(fk_orani)}, PD/DD Oranı: {guvenli_format(pddd_orani)}, Piyasa Değeri: {pd_hesapli}. Bu çarpanları değerlendir. Şirket pahalı mı, ucuz mu, yoksa büyüme beklentileri mi fiyatlanıyor? Detaylıca yorumla.)
+                    📰 **3. STRATEJİ VE HABER AKIŞI ETKİSİ**
+                    (Aşağıdaki KAP haberlerinin şirketin geleceğine ve hisse fiyatına olası etkisini cesurca yorumla.)
 
-                    **5. GENEL DEĞERLENDİRME VE BEKLENTİLER**
-                    Bu bölümü iki alt başlığa ayırarak profesyonelce tamamla:
-                    * **Güçlü Yönler:** (Tablodan ve haberlerden çıkardığın en az 3 çok güçlü argüman)
-                    * **Dikkat Noktaları / Riskler:** (Yatırımcının dikkat etmesi gereken makro veya mikro en az 2 risk faktörü)
+                    💎 **4. DEĞERLEME VE PİYASA ÇARPANLARI**
+                    (F/K: {guvenli_format(fk_orani)}, PD/DD: {guvenli_format(pddd_orani)}, Piyasa Değeri: {pd_hesapli}. Bu çarpanları yorumla; hisse ucuz mu, pahalı mı, beklentiler mi fiyatlanıyor? Net bir şekilde değerlendir.)
+
+                    🎯 **5. ALbANiAn_Trader ÖZETİ (SONUÇ)**
+                    * **💪 Güçlü Yönler:** (Tablodan ve haberlerden bulduğun en iyi 3 özelliği maddeler halinde yaz.)
+                    * **⚠️ Riskler:** (Yatırımcının dikkat etmesi gereken 2 kritik riski maddeler halinde yaz.)
+                    * **💡 Final Notu:** (Yatırımcıya tek cümlelik, havalı ve akılda kalıcı bir kapanış sözü bırak.)
 
                     Kurallar:
-                    - Rapor dili son derece resmi, objektif ve finansal terimlere hakim olmalıdır.
-                    - Asla hayali rakamlar uydurma, sadece aşağıdaki verileri kullan.
+                    - Asla uzun ve sıkıcı paragraflar yazma. Her şeyi şık maddeler (bullet points) ve kalın yazılar (bold) ile formatla.
+                    - Sadece verdiğim gerçek verileri kullan, hayali rakamlar uydurma.
                     
                     Finansal Tablo Verileri:
                     {guncel_bilanco.to_markdown()}
@@ -254,4 +270,4 @@ if analiz_butonu and hisse_kodu:
         except Exception as e:
             st.error(f"Sistemsel bir hata oluştu. Hata Detayı: {e}")
 else:
-    st.info("👈 Kapsamlı kurumsal analize başlamak için sol menüden hisse kodunu girin.")
+    st.info("👈 ALbANiAn_Trader Premium analizine başlamak için sol menüden hisse kodunu girin.")
