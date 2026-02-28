@@ -1,6 +1,7 @@
 import streamlit as st
 import borsapy as bp
 import requests
+import cloudscraper
 from google import genai
 import pandas as pd
 import plotly.graph_objects as go
@@ -22,7 +23,6 @@ st.markdown(
     button[kind="primary"] { background-color: #1DA1F2 !important; border: none !important; border-radius: 8px !important; }
     strong { color: #1DA1F2 !important; } 
     
-    /* Yan Menü (Sidebar) Özel Tasarımı */
     .sidebar-title { text-align: center; font-size: 26px; font-weight: 900; color: #1DA1F2; margin-bottom: 5px; letter-spacing: 1px; }
     .sidebar-subtitle { text-align: center; font-size: 14px; color: #888; margin-bottom: 25px; }
     .x-button { background-color: #000000; color: #1DA1F2; border: 1px solid #1DA1F2; padding: 10px; border-radius: 8px; text-align: center; font-weight: bold; transition: all 0.3s ease; }
@@ -36,10 +36,10 @@ API_SIFRESI = st.secrets["GEMINI_API_KEY"]
 client = genai.Client(api_key=API_SIFRESI)
 
 # ==========================================
-# AKILLI ÇİFT KADEMELİ MOTORLAR & NİNJA MODU
+# AKILLI ÇİFT KADEMELİ MOTORLAR & CLOUDSCRAPER
 # ==========================================
 def yerel_bilanco_cek(sembol):
-    """KADEME 1: Türkiye sunucularını (İş Yatırım) ninja kimliğiyle zorlar."""
+    """KADEME 1: Türkiye sunucularını Cloudscraper ile delerek geçer."""
     url = "https://www.isyatirim.com.tr/_layouts/15/IsYatirim.Website/Common/Data.aspx/MaliTablo"
     donemler = [
         ("2025", "12", "2024", "12"), ("2025", "9", "2024", "9"),
@@ -47,21 +47,18 @@ def yerel_bilanco_cek(sembol):
         ("2024", "12", "2023", "12")
     ]
     
-    # 🕵️‍♂️ İŞ YATIRIM ENGELİNİ AŞMAK İÇİN NİNJA (SAHTE) TARAYICI KİMLİĞİ
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Accept': 'application/json, text/javascript, */*; q=0.01',
-        'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
-        'X-Requested-With': 'XMLHttpRequest',
-        'Referer': f'https://www.isyatirim.com.tr/tr-tr/analiz/hisse/Sayfalar/sirket-karti.aspx?hisse={sembol}',
-        'Connection': 'keep-alive'
-    }
+    # 🕵️‍♂️ Güvenlik duvarlarını aşan özel sistem
+    scraper = cloudscraper.create_scraper(browser={
+        'browser': 'chrome',
+        'platform': 'windows',
+        'desktop': True
+    })
 
     for tablo_tipi in ["XI_29", "UFRS"]:
         for y1, p1, y2, p2 in donemler:
             params = {"companyCode": sembol, "exchange": "TRY", "financialGroup": tablo_tipi, "year1": y1, "period1": p1, "year2": y2, "period2": p2}
             try:
-                cevap = requests.get(url, params=params, headers=headers, timeout=8)
+                cevap = scraper.get(url, params=params, timeout=10)
                 if cevap.status_code == 200:
                     veri = cevap.json().get('value', [])
                     if veri:
@@ -146,7 +143,7 @@ if analiz_butonu and hisse_kodu:
             hisse = bp.Ticker(hisse_kodu)
             info = hisse.info
             
-            # --- MOTOR 1 (NİNJA YEREL SORGULAMA) ---
+            # --- MOTOR 1 (YEREL SORGULAMA) ---
             guncel_bilanco, bulunan_donem, kaynak = yerel_bilanco_cek(hisse_kodu)
             
             # --- MOTOR 2 (GLOBAL YEDEK SORGULAMA) ---
@@ -169,7 +166,7 @@ if analiz_butonu and hisse_kodu:
             if "Yerel" in str(kaynak):
                 st.success(f"📡 **Veri Kaynağı:** {kaynak} | 📅 **Dönem:** {bulunan_donem} (En Taze Veri)")
             elif "Global" in str(kaynak):
-                st.warning(f"📡 **Veri Kaynağı:** {kaynak} | 📅 **Dönem:** {bulunan_donem} (Yerel sunucu yanıt vermedi, globalden çekildi)")
+                st.warning(f"📡 **Veri Kaynağı:** {kaynak} | 📅 **Dönem:** {bulunan_donem} (Yerel sunucu Cloudflare engeline takıldı, globalden çekildi)")
             else:
                 st.error("📡 Hiçbir sunucudan veri alınamadı! Şirket kodu hatalı olabilir.")
 
