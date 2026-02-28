@@ -32,7 +32,6 @@ client = genai.Client(api_key=API_SIFRESI)
 # AKILLI ÇİFT KADEMELİ (YEREL -> GLOBAL) MOTORLAR
 # ==========================================
 def yerel_bilanco_cek(sembol):
-    """KADEME 1: Türkiye sunucularını (İş Yatırım) zorlar."""
     url = "https://www.isyatirim.com.tr/_layouts/15/IsYatirim.Website/Common/Data.aspx/MaliTablo"
     donemler = [
         ("2025", "12", "2024", "12"), ("2025", "9", "2024", "9"),
@@ -62,7 +61,6 @@ def yerel_bilanco_cek(sembol):
     return pd.DataFrame(), None, None
 
 def son_kap_haberleri(sembol):
-    """Hisseye ait son KAP ve haber başlıklarını çeker."""
     url = f"https://news.google.com/rss/search?q={sembol}+hisse+KAP+haberleri&hl=tr&gl=TR&ceid=TR:tr"
     try:
         cevap = requests.get(url, timeout=4)
@@ -78,7 +76,6 @@ def son_kap_haberleri(sembol):
     return "Şirketle ilgili son 24 saate ait önemli bir haber akışı bulunamadı."
 
 def yedekli_fiyat_cek(hisse):
-    """Fiyatı bulana kadar farklı kapıları dener."""
     try:
         fiyat = hisse.fast_info.get('last_price')
         if fiyat: return fiyat
@@ -136,7 +133,7 @@ if analiz_butonu and hisse_kodu:
             # --- MOTOR 1: YEREL SORGULAMA ---
             guncel_bilanco, bulunan_donem, kaynak = yerel_bilanco_cek(hisse_kodu)
             
-            # --- MOTOR 2: GLOBAL YEDEK (Yerel başarısız olursa devreye girer) ---
+            # --- MOTOR 2: GLOBAL YEDEK ---
             if guncel_bilanco.empty:
                 try:
                     df_global = hisse.quarterly_income_stmt
@@ -152,7 +149,7 @@ if analiz_butonu and hisse_kodu:
 
             haberler_metni = son_kap_haberleri(hisse_kodu)
 
-            # --- KAYNAK GÖSTERGESİ (Senin vizyonun) ---
+            # --- KAYNAK GÖSTERGESİ ---
             if "Yerel" in str(kaynak):
                 st.success(f"📡 **Veri Kaynağı:** {kaynak} | 📅 **Dönem:** {bulunan_donem} (En Taze Veri)")
             elif "Global" in str(kaynak):
@@ -209,4 +206,28 @@ if analiz_butonu and hisse_kodu:
 
             with tab2:
                 st.subheader("📰 Son Dakika Haber Radar Sistemi")
-                st.caption(f"Google Haberler altyapısı kullanılarak {hisse_kodu} için KAP ve borsa
+                st.caption(f"Google Haberler altyapısı kullanılarak {hisse_kodu} için KAP ve borsa haberleri taranmıştır.")
+                
+                if "bulunamadı" not in haberler_metni:
+                    st.success("Yeni haberler bulundu!")
+                    st.markdown(haberler_metni)
+                else:
+                    st.warning(haberler_metni)
+                    
+                if not guncel_bilanco.empty:
+                    with st.expander("📊 Detaylı Mali Tabloyu Göster (İncelemek İsteyenler İçin)"):
+                        st.dataframe(guncel_bilanco, use_container_width=True)
+
+            with tab3:
+                gecmis = hisse.history(period="6ay")
+                if not gecmis.empty:
+                    fig = go.Figure(data=[go.Candlestick(x=gecmis.index, open=gecmis['Open'], high=gecmis['High'], low=gecmis['Low'], close=gecmis['Close'])])
+                    fig.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False)
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.warning("Grafik verisi bulunamadı.")
+
+        except Exception as e:
+            st.error(f"Sistemsel bir hata oluştu. Hata Detayı: {e}")
+else:
+    st.info("👈 Analize başlamak için sol menüden hisse kodunu girin.")
