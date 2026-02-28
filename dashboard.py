@@ -30,32 +30,47 @@ client = genai.Client(api_key=API_SIFRESI)
 # AKILLI VE YEREL VERİ ÇEKME MODÜLLERİ
 # ==========================================
 def yerel_bilanco_cek(sembol):
-    """Doğrudan İş Yatırım servislerinden en güncel bilançoyu (KAP'a düştüğü an) çeker."""
+    """En güncel bilançoyu bulana kadar geçmiş dönemleri tarar."""
     url = "https://www.isyatirim.com.tr/_layouts/15/IsYatirim.Website/Common/Data.aspx/MaliTablo"
     
-    # Bazı şirketler konsolide (XI_29), bazıları solo (UFRS) açıklar. İkisini de dener.
+    # En güncelden geriye doğru tarama listesi (2025 Q4 -> 2025 Q3 -> 2025 Q2...)
+    donemler = [
+        ("2025", "12", "2024", "12"),
+        ("2025", "9", "2024", "9"),
+        ("2025", "6", "2024", "6"),
+        ("2025", "3", "2024", "3"),
+        ("2024", "12", "2023", "12")
+    ]
+    
     for tablo_tipi in ["XI_29", "UFRS"]:
-        params = {
-            "companyCode": sembol,
-            "exchange": "TRY",
-            "financialGroup": tablo_tipi,
-            "year1": "2025",
-            "period1": "12", # Q4 (12 Aylık)
-            "year2": "2024",
-            "period2": "12"
-        }
-        try:
-            cevap = requests.get(url, params=params, headers={'User-Agent': 'Mozilla/5.0'})
-            veri = cevap.json().get('value', [])
-            if veri:
-                df = pd.DataFrame(veri)[['itemDescTr', 'value1', 'value2']]
-                df.columns = ['Finansal Kalem', '2025 Q4 (Güncel)', '2024 Q4 (Geçmiş)']
-                # Boş satırları temizle
-                df = df[df['2025 Q4 (Güncel)'].notna()].reset_index(drop=True)
-                return df
-        except:
-            continue
-    return pd.DataFrame()
+        for y1, p1, y2, p2 in donemler:
+            params = {
+                "companyCode": sembol,
+                "exchange": "TRY",
+                "financialGroup": tablo_tipi,
+                "year1": y1,
+                "period1": p1,
+                "year2": y2,
+                "period2": p2
+            }
+            try:
+                cevap = requests.get(url, params=params, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5)
+                veri = cevap.json().get('value', [])
+                if veri:
+                    df = pd.DataFrame(veri)[['itemDescTr', 'value1', 'value2']]
+                    
+                    # Bulunan çeyreği isimlendir
+                    ceyrek_adi = f"Q{int(p1)//3}"
+                    gecmis_ceyrek_adi = f"Q{int(p2)//3}"
+                    
+                    df.columns = ['Finansal Kalem', f'{y1} {ceyrek_adi}', f'{y2} {gecmis_ceyrek_adi}']
+                    df = df[df[f'{y1} {ceyrek_adi}'].notna()].reset_index(drop=True)
+                    
+                    return df, f"{y1} {ceyrek_adi}" # Tabloyu ve dönemi geri döndür
+            except:
+                continue
+                
+    return pd.DataFrame(), None
 
 def yedekli_fiyat_cek(hisse):
     """Fiyat gelmezse grafikten dünün kapanışını zorla alır."""
@@ -78,7 +93,7 @@ def guvenli_format(deger):
 # ==========================================
 with st.sidebar:
     try:
-        st.image("logo.png", use_container_width=True) # Afilli logon burada!
+        st.image("logo.png", use_container_width=True)
     except:
         st.markdown("### 🤖 BİLANÇO ROBOTU")
     
@@ -86,7 +101,7 @@ with st.sidebar:
     st.markdown("---")
     
     st.title("Arama Motoru")
-    hisse_kodu = st.text_input("🔍 Hisse Kodu (Örn: ASELS):").upper()
+    hisse_kodu = st.text_input("🔍 Hisse Kodu (Örn: RTALB, ASELS):").upper()
     analiz_butonu = st.button("📊 Analizi Başlat", type="primary", use_container_width=True)
     
     st.markdown("---")
@@ -108,13 +123,13 @@ with st.sidebar:
 st.title("📈 Bilanço Robotu: Akıllı Finansal Terminal")
 
 if analiz_butonu and hisse_kodu:
-    with st.spinner(f"⏳ {hisse_kodu} için en güncel Türkiye (KAP) verileri taranıyor..."):
+    with st.spinner(f"⏳ {hisse_kodu} için Türkiye sunucularından en güncel bilanço aranıyor..."):
         try:
             hisse = bp.Ticker(hisse_kodu)
             info = hisse.info
             
-            # --- YERLİ BİLANÇO SORGUSU ---
-            guncel_bilanco = yerel_bilanco_cek(hisse_kodu)
+            # --- AKILLI BİLANÇO AVCISI ---
+            guncel_bilanco, bulunan_donem = yerel_bilanco_cek(hisse_kodu)
             
             # --- ZORLU FİYAT/ÇARPAN VERİLERİ ---
             son_fiyat = yedekli_fiyat_cek(hisse)
@@ -137,13 +152,13 @@ if analiz_butonu and hisse_kodu:
             tab1, tab2, tab3 = st.tabs(["🧠 AI Bilanço Raporu", "📊 KAP Mali Tablolar (En Güncel)", "📉 Fiyat Grafiği"])
 
             with tab1:
-                st.subheader(f"🤖 Yapay Zeka Raporu: {hisse_kodu}")
                 if not guncel_bilanco.empty:
+                    st.subheader(f"🤖 Yapay Zeka Raporu: {hisse_kodu} ({bulunan_donem})")
                     istek = f"""
-                    Sen profesyonel bir borsa analistisin. Sana {hisse_kodu} hissesinin doğrudan Türkiye'den çekilmiş en güncel 2025 Q4 ve 2024 Q4 karşılaştırmalı finansal tablosunu veriyorum.
+                    Sen profesyonel bir borsa analistisin. Sana {hisse_kodu} hissesinin Türkiye'den çekilmiş en güncel ({bulunan_donem}) karşılaştırmalı finansal tablosunu veriyorum.
                     Lütfen şu tabloya bakarak:
                     1. Satış gelirlerindeki artışı/azalışı yorumla.
-                    2. Şirketin Dönem Net Kârı / Zararı durumunu (2025 vs 2024 kıyaslayarak) net bir dille açıkla.
+                    2. Şirketin Dönem Net Kârı / Zararı durumunu net bir dille açıkla.
                     3. Yatırımcı için çok net 2 tane "Güçlü Yön" ve 2 tane "Risk/Dikkat Edilmesi Gereken Nokta" çıkar.
                     
                     Finansal Veri:
@@ -152,14 +167,14 @@ if analiz_butonu and hisse_kodu:
                     cevap = client.models.generate_content(model='gemini-2.5-flash', contents=istek)
                     st.markdown(cevap.text)
                 else:
-                    st.warning("Bu şirketin güncel bilançosu henüz açıklanmamış veya formata uygun değil.")
+                    st.warning("Bu şirketin finansal verileri şu an yerel sunucularda bulunamıyor veya bakım çalışması yapılıyor.")
 
             with tab2:
                 if not guncel_bilanco.empty:
-                    st.success("Aşağıdaki veriler doğrudan Türkiye'deki yerel aracı kurum veri tabanından anlık olarak çekilmiştir.")
+                    st.success(f"Aşağıdaki veriler doğrudan Türkiye'deki yerel aracı kurum veri tabanından anlık olarak çekilmiştir. En son açıklanan bilanço: **{bulunan_donem}**")
                     st.dataframe(guncel_bilanco, use_container_width=True, height=600)
                 else:
-                    st.warning("Güncel bilanço verisi bulunamadı. Şirket henüz 2025 bilançosunu KAP'a bildirmemiş olabilir.")
+                    st.warning("Güncel bilanço verisi bulunamadı.")
 
             with tab3:
                 gecmis = hisse.history(period="6ay")
