@@ -18,6 +18,8 @@ st.markdown(
     .stTab, .stMetric, .stMarkdown, .stSubheader, .stTitle, p, h1, h2, h3, li { color: #FFFFFF !important; }
     .stMetricDelta > div { color: #00FF00 !important; }
     button[kind="primary"] { background-color: #1DA1F2 !important; border: none !important; }
+    /* Yapay zeka raporundaki vurguları güzelleştiren özel ayar */
+    strong { color: #1DA1F2 !important; } 
     </style>
     """,
     unsafe_allow_html=True
@@ -30,7 +32,6 @@ client = genai.Client(api_key=API_SIFRESI)
 # AKILLI MELEZ (HYBRID) VERİ ÇEKME MODÜLLERİ
 # ==========================================
 def yerel_bilanco_cek(sembol):
-    """Önce İş Yatırım'ı dener."""
     url = "https://www.isyatirim.com.tr/_layouts/15/IsYatirim.Website/Common/Data.aspx/MaliTablo"
     donemler = [
         ("2025", "12", "2024", "12"), ("2025", "9", "2024", "9"),
@@ -45,7 +46,6 @@ def yerel_bilanco_cek(sembol):
                 "year1": y1, "period1": p1, "year2": y2, "period2": p2
             }
             try:
-                # Bot olmadığımızı kanıtlamak için daha gelişmiş bir başlık ekliyoruz
                 headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
                 cevap = requests.get(url, params=params, headers=headers, timeout=5)
                 veri = cevap.json().get('value', [])
@@ -61,7 +61,6 @@ def yerel_bilanco_cek(sembol):
     return pd.DataFrame(), None, None
 
 def yedekli_fiyat_cek(hisse):
-    """Fiyatı zorla bulur."""
     try:
         fiyat = hisse.fast_info.get('last_price')
         if fiyat: return fiyat
@@ -110,15 +109,14 @@ with st.sidebar:
 st.title("📈 Bilanço Robotu: Akıllı Finansal Terminal")
 
 if analiz_butonu and hisse_kodu:
-    with st.spinner(f"⏳ {hisse_kodu} verileri taranıyor (Melez Motor Devrede)..."):
+    with st.spinner(f"⏳ {hisse_kodu} verileri taranıyor ve görsel rapor hazırlanıyor..."):
         try:
             hisse = bp.Ticker(hisse_kodu)
             info = hisse.info
             
-            # --- MOTOR 1: İŞ YATIRIM DENEMESİ ---
+            # --- MOTOR 1 & 2 ---
             guncel_bilanco, bulunan_donem, kaynak = yerel_bilanco_cek(hisse_kodu)
             
-            # --- MOTOR 2: GLOBAL YEDEK (İŞ YATIRIM ÇÖKERSE DEVREYE GİRER) ---
             if guncel_bilanco.empty:
                 try:
                     df_global = hisse.quarterly_income_stmt
@@ -130,10 +128,8 @@ if analiz_butonu and hisse_kodu:
                         guncel_bilanco = df_global
                         bulunan_donem = f"Global Son Çeyrek"
                         kaynak = "Borsa Global API"
-                except:
-                    pass
+                except: pass
 
-            # --- ZORLU FİYAT/ÇARPAN VERİLERİ ---
             son_fiyat = yedekli_fiyat_cek(hisse)
             piyasa_degeri = info.get('marketCap') or hisse.fast_info.get('market_cap', "N/A")
             fk_orani = info.get('trailingPE', "N/A")
@@ -145,23 +141,35 @@ if analiz_butonu and hisse_kodu:
             c1.metric("Son Fiyat", f"{son_fiyat:.2f} ₺" if isinstance(son_fiyat, (int, float)) else "N/A")
             if isinstance(piyasa_degeri, (int, float)):
                 c2.metric("Piyasa Değeri", f"{(piyasa_degeri / 1_000_000_000):.2f} Mrd ₺")
-            else:
-                c2.metric("Piyasa Değeri", "-")
+            else: c2.metric("Piyasa Değeri", "-")
             c3.metric("F/K Oranı", guvenli_format(fk_orani))
             c4.metric("PD/DD Oranı", guvenli_format(pddd_orani))
 
+            st.divider() # Araya şık bir çizgi çektik
+
             # --- SEKMELER ---
-            tab1, tab2, tab3 = st.tabs(["🧠 AI Bilanço Raporu", "📊 Mali Tablolar", "📉 Fiyat Grafiği"])
+            tab1, tab2, tab3 = st.tabs(["🎯 AI Bilanço Özeti", "📊 Mali Tablolar", "📉 Fiyat Grafiği"])
 
             with tab1:
                 if not guncel_bilanco.empty:
-                    st.subheader(f"🤖 Yapay Zeka Raporu: {hisse_kodu}")
-                    st.caption(f"Veri Kaynağı: {kaynak} | Dönem: {bulunan_donem}")
+                    st.subheader(f"🤖 Akıllı Bilanço Özeti: {hisse_kodu}")
+                    st.info(f"📍 **Veri Kaynağı:** {kaynak} | 📅 **İncelenen Dönem:** {bulunan_donem}")
+                    
+                    # --- İŞTE YENİ GÖRSEL VE VURUCU PROMPT ---
                     istek = f"""
-                    Sen profesyonel bir borsa analistisin. Sana {hisse_kodu} hissesinin ({kaynak}) kaynaklı ({bulunan_donem}) karşılaştırmalı finansal tablosunu veriyorum.
-                    1. Gelir/Satışlardaki durumu yorumla.
-                    2. Kârlılık veya Zarar durumunu açıkla.
-                    3. 2 tane "Güçlü Yön" ve 2 tane "Risk" çıkar.
+                    Sen profesyonel ve modern bir borsa analistisin. Sana {hisse_kodu} hissesinin ({kaynak}) kaynaklı ({bulunan_donem}) karşılaştırmalı finansal tablosunu veriyorum.
+                    
+                    Lütfen raporunu "Sıkıcı bir mektup" ŞEKLİNDE DEĞİL, tamamen aşağıdaki yapıya sadık kalarak, kısa, net, vizyoner ve bol emojili bir "Yönetici Özeti" formatında hazırla:
+
+                    🎯 **1. Gelir Performansı:** (Satışlardaki artış/azalış durumunu yüzdesel tahminlerle ve 📈/📉 emojileriyle tek cümlelik maddeler halinde yaz.)
+                    💰 **2. Kârlılık Durumu:** (Net kâr veya zarar durumunu, önceki döneme göre gelişimini 🟢/🔴 emojileriyle çok net belirt.)
+                    🚀 **3. Şirketin Güçlü Yönleri:** (Tabloya bakarak bulduğun en iyi 2 şeyi kısa madde olarak yaz.)
+                    ⚠️ **4. Riskler & Dikkat Edilecekler:** (Tabloya bakarak bulduğun en riskli 2 şeyi kısa madde olarak yaz.)
+                    💡 **5. Son Söz:** (Yatırımcıya tek cümlelik, objektif ve havalı bir analist kapanış notu bırak.)
+
+                    Kurallar:
+                    - Uzun paragraflar KULLANMA.
+                    - Sadece maddeler (bullet points) ve kalın yazılar (bold) kullan.
                     
                     Finansal Veri:
                     {guncel_bilanco.to_markdown()}
@@ -173,7 +181,7 @@ if analiz_butonu and hisse_kodu:
 
             with tab2:
                 if not guncel_bilanco.empty:
-                    st.success(f"Bilanço verisi başarıyla **{kaynak}** üzerinden çekildi.")
+                    st.success(f"✅ Bilanço verisi başarıyla **{kaynak}** üzerinden çekildi.")
                     st.dataframe(guncel_bilanco, use_container_width=True, height=600)
                 else:
                     st.warning("Gösterilecek tablo bulunamadı.")
