@@ -23,8 +23,8 @@ st.markdown(
     strong { color: #1DA1F2 !important; } 
     
     /* Yan Menü (Sidebar) Özel Tasarımı */
-    .sidebar-title { text-align: center; font-size: 24px; font-weight: 900; color: #1DA1F2; margin-bottom: 5px; letter-spacing: 1px; }
-    .sidebar-subtitle { text-align: center; font-size: 13px; color: #888; margin-bottom: 25px; }
+    .sidebar-title { text-align: center; font-size: 26px; font-weight: 900; color: #1DA1F2; margin-bottom: 5px; letter-spacing: 1px; }
+    .sidebar-subtitle { text-align: center; font-size: 14px; color: #888; margin-bottom: 25px; }
     .x-button { background-color: #000000; color: #1DA1F2; border: 1px solid #1DA1F2; padding: 10px; border-radius: 8px; text-align: center; font-weight: bold; transition: all 0.3s ease; }
     .x-button:hover { background-color: #1DA1F2; color: #ffffff; }
     </style>
@@ -36,36 +36,50 @@ API_SIFRESI = st.secrets["GEMINI_API_KEY"]
 client = genai.Client(api_key=API_SIFRESI)
 
 # ==========================================
-# AKILLI ÇİFT KADEMELİ (YEREL -> GLOBAL) MOTORLAR
+# AKILLI ÇİFT KADEMELİ MOTORLAR & NİNJA MODU
 # ==========================================
 def yerel_bilanco_cek(sembol):
+    """KADEME 1: Türkiye sunucularını (İş Yatırım) ninja kimliğiyle zorlar."""
     url = "https://www.isyatirim.com.tr/_layouts/15/IsYatirim.Website/Common/Data.aspx/MaliTablo"
     donemler = [
         ("2025", "12", "2024", "12"), ("2025", "9", "2024", "9"),
         ("2025", "6", "2024", "6"), ("2025", "3", "2024", "3"),
         ("2024", "12", "2023", "12")
     ]
+    
+    # 🕵️‍♂️ İŞ YATIRIM ENGELİNİ AŞMAK İÇİN NİNJA (SAHTE) TARAYICI KİMLİĞİ
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/javascript, */*; q=0.01',
+        'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+        'X-Requested-With': 'XMLHttpRequest',
+        'Referer': f'https://www.isyatirim.com.tr/tr-tr/analiz/hisse/Sayfalar/sirket-karti.aspx?hisse={sembol}',
+        'Connection': 'keep-alive'
+    }
+
     for tablo_tipi in ["XI_29", "UFRS"]:
         for y1, p1, y2, p2 in donemler:
             params = {"companyCode": sembol, "exchange": "TRY", "financialGroup": tablo_tipi, "year1": y1, "period1": p1, "year2": y2, "period2": p2}
             try:
-                headers = {'User-Agent': 'Mozilla/5.0'}
-                cevap = requests.get(url, params=params, headers=headers, timeout=4)
-                veri = cevap.json().get('value', [])
-                if veri:
-                    df = pd.DataFrame(veri)[['itemDescTr', 'value1', 'value2']]
-                    ceyrek_adi = f"Q{int(p1)//3}"
-                    gecmis_ceyrek_adi = f"Q{int(p2)//3}"
-                    df.columns = ['Finansal Kalem', f'{y1} {ceyrek_adi}', f'{y2} {gecmis_ceyrek_adi}']
-                    df = df[df[f'{y1} {ceyrek_adi}'].notna()].reset_index(drop=True)
-                    return df, f"{y1} {ceyrek_adi}", "🇹🇷 İş Yatırım (Yerel Sunucu)"
-            except: continue
+                cevap = requests.get(url, params=params, headers=headers, timeout=8)
+                if cevap.status_code == 200:
+                    veri = cevap.json().get('value', [])
+                    if veri:
+                        df = pd.DataFrame(veri)[['itemDescTr', 'value1', 'value2']]
+                        ceyrek_adi = f"Q{int(p1)//3}"
+                        gecmis_ceyrek_adi = f"Q{int(p2)//3}"
+                        df.columns = ['Finansal Kalem', f'{y1} {ceyrek_adi}', f'{y2} {gecmis_ceyrek_adi}']
+                        df = df[df[f'{y1} {ceyrek_adi}'].notna()].reset_index(drop=True)
+                        return df, f"{y1} {ceyrek_adi}", "🇹🇷 İş Yatırım (Yerel Sunucu)"
+            except Exception:
+                continue
+                
     return pd.DataFrame(), None, None
 
 def son_kap_haberleri(sembol):
     url = f"https://news.google.com/rss/search?q={sembol}+hisse+KAP+haberleri&hl=tr&gl=TR&ceid=TR:tr"
     try:
-        cevap = requests.get(url, timeout=4)
+        cevap = requests.get(url, timeout=5)
         root = ET.fromstring(cevap.text)
         haberler = []
         for item in root.findall('.//item')[:5]:
@@ -119,7 +133,7 @@ with st.sidebar:
     )
     
     st.markdown("<br><br>", unsafe_allow_html=True)
-    st.caption("⚙️ Mod: ALbANiAn Premium")
+    st.caption("⚙️ Mod: ALbANiAn VIP Terminal")
 
 # ==========================================
 # 3. ANA EKRAN VE ANALİZ MANTIĞI
@@ -132,8 +146,10 @@ if analiz_butonu and hisse_kodu:
             hisse = bp.Ticker(hisse_kodu)
             info = hisse.info
             
+            # --- MOTOR 1 (NİNJA YEREL SORGULAMA) ---
             guncel_bilanco, bulunan_donem, kaynak = yerel_bilanco_cek(hisse_kodu)
             
+            # --- MOTOR 2 (GLOBAL YEDEK SORGULAMA) ---
             if guncel_bilanco.empty:
                 try:
                     df_global = hisse.quarterly_income_stmt
@@ -149,13 +165,15 @@ if analiz_butonu and hisse_kodu:
 
             haberler_metni = son_kap_haberleri(hisse_kodu)
 
+            # KAYNAK GÖSTERGESİ
             if "Yerel" in str(kaynak):
                 st.success(f"📡 **Veri Kaynağı:** {kaynak} | 📅 **Dönem:** {bulunan_donem} (En Taze Veri)")
             elif "Global" in str(kaynak):
                 st.warning(f"📡 **Veri Kaynağı:** {kaynak} | 📅 **Dönem:** {bulunan_donem} (Yerel sunucu yanıt vermedi, globalden çekildi)")
             else:
-                st.error("📡 Hiçbir sunucudan veri alınamadı!")
+                st.error("📡 Hiçbir sunucudan veri alınamadı! Şirket kodu hatalı olabilir.")
 
+            # TEMEL GÖSTERGELERİ ÇEKME
             son_fiyat = yedekli_fiyat_cek(hisse)
             piyasa_degeri = info.get('marketCap') or hisse.fast_info.get('market_cap', "N/A")
             fk_orani = info.get('trailingPE', "N/A")
@@ -163,6 +181,7 @@ if analiz_butonu and hisse_kodu:
 
             pd_hesapli = f"{(piyasa_degeri / 1_000_000_000):.2f} Mrd ₺" if isinstance(piyasa_degeri, (int, float)) else "N/A"
 
+            # ÜST BİLGİ KARTLARI
             st.markdown("### 📌 Temel Göstergeler")
             c1, c2, c3, c4 = st.columns(4)
             c1.metric("Son Fiyat", f"{son_fiyat:.2f} ₺" if isinstance(son_fiyat, (int, float)) else "N/A")
@@ -172,6 +191,7 @@ if analiz_butonu and hisse_kodu:
 
             st.divider()
 
+            # SEKMELER
             tab1, tab2, tab3 = st.tabs(["📑 ALbANiAn VIP Analiz", "📰 KAP & Haber Akışı", "📉 Mali Tablolar & Grafik"])
 
             with tab1:
@@ -182,6 +202,7 @@ if analiz_butonu and hisse_kodu:
                     st.markdown(f"**🗓️ Rapor Tarihi:** {bugun} | **Hazırlayan:** ***ALbANiAn_Trader*** ✅")
                     st.markdown("---")
                     
+                    # ALbANiAn_Trader ÖZEL PROMPT
                     istek = f"""
                     Sen, piyasaların yakından takip ettiği usta borsa analisti ve stratejisti 'ALbANiAn_Trader'sın.
                     Aşağıda sana {hisse_kodu} hissesine ait en güncel ({bulunan_donem}) finansal tabloyu, piyasa çarpanlarını ve son dakika KAP haberlerini veriyorum.
