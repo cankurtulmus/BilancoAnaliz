@@ -6,7 +6,7 @@ import pandas as pd
 # 1. YAPAY ZEKA BAĞLANTI AYARLARI
 # ==========================================
 # Şifreyi güvenli dosyadan çekiyoruz
-API_SIFRESI = st.secrets["GEMINI_API_KEY"] 
+API_SIFRESI = st.secrets["GEMINI_API_KEY"]
 client = genai.Client(api_key=API_SIFRESI)
 
 def kapsamli_bilanco_analizi(sembol):
