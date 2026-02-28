@@ -10,17 +10,23 @@ from datetime import datetime
 # ==========================================
 # 1. SAYFA VE TASARIM AYARLARI (DARK MODE)
 # ==========================================
-st.set_page_config(page_title="Bilanço Robotu | Analiz Pro", page_icon="🤖", layout="wide")
+st.set_page_config(page_title="Bilanço Robotu | VIP Terminal", page_icon="🤖", layout="wide")
 
 st.markdown(
     """
     <style>
     .stApp { background-color: #000000; color: #FFFFFF; }
-    [data-testid="stSidebar"] { background-color: #0e0e0e; border-right: 1px solid #333; }
+    [data-testid="stSidebar"] { background-color: #0A0A0A; border-right: 1px solid #1c1c1c; }
     .stTab, .stMetric, .stMarkdown, .stSubheader, .stTitle, p, h1, h2, h3, li { color: #FFFFFF !important; }
     .stMetricDelta > div { color: #00FF00 !important; }
-    button[kind="primary"] { background-color: #1DA1F2 !important; border: none !important; }
+    button[kind="primary"] { background-color: #1DA1F2 !important; border: none !important; border-radius: 8px !important; }
     strong { color: #1DA1F2 !important; } 
+    
+    /* Yan Menü (Sidebar) Özel Tasarımı */
+    .sidebar-title { text-align: center; font-size: 24px; font-weight: 900; color: #1DA1F2; margin-bottom: 5px; letter-spacing: 1px; }
+    .sidebar-subtitle { text-align: center; font-size: 13px; color: #888; margin-bottom: 25px; }
+    .x-button { background-color: #000000; color: #1DA1F2; border: 1px solid #1DA1F2; padding: 10px; border-radius: 8px; text-align: center; font-weight: bold; transition: all 0.3s ease; }
+    .x-button:hover { background-color: #1DA1F2; color: #ffffff; }
     </style>
     """,
     unsafe_allow_html=True
@@ -39,13 +45,9 @@ def yerel_bilanco_cek(sembol):
         ("2025", "6", "2024", "6"), ("2025", "3", "2024", "3"),
         ("2024", "12", "2023", "12")
     ]
-    
     for tablo_tipi in ["XI_29", "UFRS"]:
         for y1, p1, y2, p2 in donemler:
-            params = {
-                "companyCode": sembol, "exchange": "TRY", "financialGroup": tablo_tipi,
-                "year1": y1, "period1": p1, "year2": y2, "period2": p2
-            }
+            params = {"companyCode": sembol, "exchange": "TRY", "financialGroup": tablo_tipi, "year1": y1, "period1": p1, "year2": y2, "period2": p2}
             try:
                 headers = {'User-Agent': 'Mozilla/5.0'}
                 cevap = requests.get(url, params=params, headers=headers, timeout=4)
@@ -57,8 +59,7 @@ def yerel_bilanco_cek(sembol):
                     df.columns = ['Finansal Kalem', f'{y1} {ceyrek_adi}', f'{y2} {gecmis_ceyrek_adi}']
                     df = df[df[f'{y1} {ceyrek_adi}'].notna()].reset_index(drop=True)
                     return df, f"{y1} {ceyrek_adi}", "🇹🇷 İş Yatırım (Yerel Sunucu)"
-            except:
-                continue
+            except: continue
     return pd.DataFrame(), None, None
 
 def son_kap_haberleri(sembol):
@@ -71,8 +72,7 @@ def son_kap_haberleri(sembol):
             title = item.find('title').text
             temiz_baslik = title.rsplit(' - ', 1)[0] if ' - ' in title else title
             haberler.append(f"📌 {temiz_baslik}")
-        if haberler:
-            return "\n".join(haberler)
+        if haberler: return "\n".join(haberler)
     except: pass
     return "Şirketle ilgili son 24 saate ait önemli bir haber akışı bulunamadı."
 
@@ -92,33 +92,34 @@ def guvenli_format(deger):
     return "-"
 
 # ==========================================
-# 2. YAN MENÜ (REKLAM VE ARAMA)
+# 2. YAN MENÜ (PREMIUM SIDEBAR TASARIMI)
 # ==========================================
 with st.sidebar:
-    try:
-        st.image("logo.png", use_container_width=True)
-    except:
-        st.markdown("### 🤖 BİLANÇO ROBOTU")
-    
-    st.markdown("<p style='text-align: center; font-size: 0.8em;'>Designed by ALbANiAn_Trader ✅</p>", unsafe_allow_html=True)
-    st.markdown("---")
-    
-    st.title("Radar")
-    hisse_kodu = st.text_input("🔍 Hisse Kodu (Örn: ASELS, THYAO):").upper()
-    analiz_butonu = st.button("📊 ALbANiAn Analizini Başlat", type="primary", use_container_width=True)
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("<div class='sidebar-title'>🤖 BİLANÇO ROBOTU</div>", unsafe_allow_html=True)
+    st.markdown("<div class='sidebar-subtitle'>Designed by <b>ALbANiAn_Trader</b> ✅</div>", unsafe_allow_html=True)
     
     st.markdown("---")
-    st.subheader("📢 Beni Takip Et")
+    
+    st.markdown("### 🎯 Radar Sistemi")
+    hisse_kodu = st.text_input("🔍 Hisse Kodu:", placeholder="Örn: ASELS, THYAO").upper()
+    analiz_butonu = st.button("🚀 Analizi Başlat", type="primary", use_container_width=True)
+    
+    st.markdown("---")
+    st.markdown("### 🌐 Bağlantılar")
+    
     st.markdown(
         """
-        <a href="https://x.com/albanian_trader" target="_blank">
-            <button style="background-color: #000000; color: white; border: 1px solid #555; padding: 10px; border-radius: 10px; cursor: pointer; width: 100%; font-weight: bold;">
+        <a href="https://x.com/albanian_trader" target="_blank" style="text-decoration: none;">
+            <div class="x-button">
                 𝕏 @albanian_trader
-            </button>
+            </div>
         </a>
         """, unsafe_allow_html=True
     )
-    st.caption("⚙️ Mod: ALbANiAn_Trader Premium Rapor")
+    
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    st.caption("⚙️ Mod: ALbANiAn Premium")
 
 # ==========================================
 # 3. ANA EKRAN VE ANALİZ MANTIĞI
@@ -126,12 +127,11 @@ with st.sidebar:
 st.title("📈 Bilanço Robotu: Akıllı Finansal Terminal")
 
 if analiz_butonu and hisse_kodu:
-    with st.spinner(f"⏳ {hisse_kodu} için şık, emojili ve detaylı analiz hazırlanıyor. Lütfen bekleyin..."):
+    with st.spinner("⏳ Analiz başladı..."):
         try:
             hisse = bp.Ticker(hisse_kodu)
             info = hisse.info
             
-            # --- VERİ ÇEKME İŞLEMLERİ ---
             guncel_bilanco, bulunan_donem, kaynak = yerel_bilanco_cek(hisse_kodu)
             
             if guncel_bilanco.empty:
@@ -149,13 +149,12 @@ if analiz_butonu and hisse_kodu:
 
             haberler_metni = son_kap_haberleri(hisse_kodu)
 
-            # KAYNAK BİLGİSİ
             if "Yerel" in str(kaynak):
                 st.success(f"📡 **Veri Kaynağı:** {kaynak} | 📅 **Dönem:** {bulunan_donem} (En Taze Veri)")
             elif "Global" in str(kaynak):
                 st.warning(f"📡 **Veri Kaynağı:** {kaynak} | 📅 **Dönem:** {bulunan_donem} (Yerel sunucu yanıt vermedi, globalden çekildi)")
             else:
-                st.error("📡 Hiçbir sunucudan (Yerel veya Global) veri alınamadı!")
+                st.error("📡 Hiçbir sunucudan veri alınamadı!")
 
             son_fiyat = yedekli_fiyat_cek(hisse)
             piyasa_degeri = info.get('marketCap') or hisse.fast_info.get('market_cap', "N/A")
@@ -164,7 +163,6 @@ if analiz_butonu and hisse_kodu:
 
             pd_hesapli = f"{(piyasa_degeri / 1_000_000_000):.2f} Mrd ₺" if isinstance(piyasa_degeri, (int, float)) else "N/A"
 
-            # --- ÜST BİLGİ KARTLARI ---
             st.markdown("### 📌 Temel Göstergeler")
             c1, c2, c3, c4 = st.columns(4)
             c1.metric("Son Fiyat", f"{son_fiyat:.2f} ₺" if isinstance(son_fiyat, (int, float)) else "N/A")
@@ -174,30 +172,16 @@ if analiz_butonu and hisse_kodu:
 
             st.divider()
 
-            # --- SEKMELER ---
             tab1, tab2, tab3 = st.tabs(["📑 ALbANiAn VIP Analiz", "📰 KAP & Haber Akışı", "📉 Mali Tablolar & Grafik"])
 
             with tab1:
                 if not guncel_bilanco.empty:
-                    # --- OTOMATİK TARİH VE LOGOLU İMZA ALANI ---
                     bugun = datetime.today().strftime('%d.%m.%Y')
                     
                     st.markdown(f"### 🎯 {hisse_kodu} Bilanço ve Gelecek Vizyonu Analizi")
-                    st.markdown(f"**🗓️ Rapor Tarihi:** {bugun}")
-                    
-                    col_logo, col_text = st.columns([1, 15])
-                    with col_logo:
-                        try:
-                            # Eğer klasörde logo.png varsa onu çok şık bir boyutta gösterir
-                            st.image("logo.png", width=40) 
-                        except:
-                            st.markdown("✅")
-                    with col_text:
-                        st.markdown("**Hazırlayan:** ***ALbANiAn_Trader***")
-                        
+                    st.markdown(f"**🗓️ Rapor Tarihi:** {bugun} | **Hazırlayan:** ***ALbANiAn_Trader*** ✅")
                     st.markdown("---")
                     
-                    # --- YENİ, ŞIK VE EMOJİLİ PROMPT ---
                     istek = f"""
                     Sen, piyasaların yakından takip ettiği usta borsa analisti ve stratejisti 'ALbANiAn_Trader'sın.
                     Aşağıda sana {hisse_kodu} hissesine ait en güncel ({bulunan_donem}) finansal tabloyu, piyasa çarpanlarını ve son dakika KAP haberlerini veriyorum.
