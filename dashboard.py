@@ -1,7 +1,6 @@
 import streamlit as st
 import borsapy as bp
 import requests
-import cloudscraper
 from google import genai
 import pandas as pd
 import plotly.graph_objects as go
@@ -36,10 +35,9 @@ API_SIFRESI = st.secrets["GEMINI_API_KEY"]
 client = genai.Client(api_key=API_SIFRESI)
 
 # ==========================================
-# AKILLI ÇİFT KADEMELİ MOTORLAR & CLOUDSCRAPER
+# AKILLI ÇİFT KADEMELİ MOTORLAR (HIZLI GEÇİŞ)
 # ==========================================
 def yerel_bilanco_cek(sembol):
-    """KADEME 1: Türkiye sunucularını Cloudscraper ile delerek geçer."""
     url = "https://www.isyatirim.com.tr/_layouts/15/IsYatirim.Website/Common/Data.aspx/MaliTablo"
     donemler = [
         ("2025", "12", "2024", "12"), ("2025", "9", "2024", "9"),
@@ -47,18 +45,17 @@ def yerel_bilanco_cek(sembol):
         ("2024", "12", "2023", "12")
     ]
     
-    # 🕵️‍♂️ Güvenlik duvarlarını aşan özel sistem
-    scraper = cloudscraper.create_scraper(browser={
-        'browser': 'chrome',
-        'platform': 'windows',
-        'desktop': True
-    })
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        'Accept': 'application/json, text/javascript, */*; q=0.01'
+    }
 
     for tablo_tipi in ["XI_29", "UFRS"]:
         for y1, p1, y2, p2 in donemler:
             params = {"companyCode": sembol, "exchange": "TRY", "financialGroup": tablo_tipi, "year1": y1, "period1": p1, "year2": y2, "period2": p2}
             try:
-                cevap = scraper.get(url, params=params, timeout=10)
+                # 3 saniyede cevap vermezse direkt global API'ye geçer (Siteyi dondurmaz)
+                cevap = requests.get(url, params=params, headers=headers, timeout=3)
                 if cevap.status_code == 200:
                     veri = cevap.json().get('value', [])
                     if veri:
@@ -68,7 +65,7 @@ def yerel_bilanco_cek(sembol):
                         df.columns = ['Finansal Kalem', f'{y1} {ceyrek_adi}', f'{y2} {gecmis_ceyrek_adi}']
                         df = df[df[f'{y1} {ceyrek_adi}'].notna()].reset_index(drop=True)
                         return df, f"{y1} {ceyrek_adi}", "🇹🇷 İş Yatırım (Yerel Sunucu)"
-            except Exception:
+            except:
                 continue
                 
     return pd.DataFrame(), None, None
@@ -76,7 +73,7 @@ def yerel_bilanco_cek(sembol):
 def son_kap_haberleri(sembol):
     url = f"https://news.google.com/rss/search?q={sembol}+hisse+KAP+haberleri&hl=tr&gl=TR&ceid=TR:tr"
     try:
-        cevap = requests.get(url, timeout=5)
+        cevap = requests.get(url, timeout=4)
         root = ET.fromstring(cevap.text)
         haberler = []
         for item in root.findall('.//item')[:5]:
@@ -166,7 +163,7 @@ if analiz_butonu and hisse_kodu:
             if "Yerel" in str(kaynak):
                 st.success(f"📡 **Veri Kaynağı:** {kaynak} | 📅 **Dönem:** {bulunan_donem} (En Taze Veri)")
             elif "Global" in str(kaynak):
-                st.warning(f"📡 **Veri Kaynağı:** {kaynak} | 📅 **Dönem:** {bulunan_donem} (Yerel sunucu Cloudflare engeline takıldı, globalden çekildi)")
+                st.warning(f"📡 **Veri Kaynağı:** {kaynak} | 📅 **Dönem:** {bulunan_donem} (Global sistem üzerinden çekildi)")
             else:
                 st.error("📡 Hiçbir sunucudan veri alınamadı! Şirket kodu hatalı olabilir.")
 

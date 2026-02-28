@@ -3,4 +3,3 @@ borsapy
 google-genai
 pandas
 plotly
-cloudscraper
